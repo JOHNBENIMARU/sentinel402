@@ -40,7 +40,8 @@ async fn main() {
         .route("/api/badge/{audit_id}", get(get_badge))
         .route("/api/report/{audit_id}", get(get_report))
         .fallback_service(ServeDir::new("frontend"))
-        .layer(CorsLayer::permissive());
+        .layer(CorsLayer::permissive())
+        .layer(axum::extract::DefaultBodyLimit::max(512 * 1024)); // 512KB for contract source
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3402").await.unwrap();
     println!("🔥 Listening on http://localhost:3402");
