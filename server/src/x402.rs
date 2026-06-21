@@ -1,6 +1,5 @@
 use casper_types::crypto::{AsymmetricType, PublicKey, Signature, verify};
 use serde::Serialize;
-use serde_json::Value;
 
 #[derive(Serialize)]
 pub struct PaymentRequired {
@@ -53,23 +52,11 @@ pub async fn verify_payment(
     }
 
 
-    // Example of calling an external facilitator:
-    let client = reqwest::Client::new();
-    let res = client.post("https://mock-x402.casper.network/verify")
-        .json(&serde_json::json!({ "proof": payment_proof }))
-        .send()
-        .await;
-
-    match res {
-        Ok(response) if response.status().is_success() => {
-            let data: Value = response.json().await.unwrap_or_default();
-            data.get("valid").and_then(|v| v.as_bool()).unwrap_or(false)
-        },
-        _ => {
-            println!("x402 Verification failed for proof: {}", payment_proof);
-            false
-        }
-    }
+    // In production: call the real x402 facilitator endpoint here.
+    // For the hackathon, if crypto verification failed and mock is disabled,
+    // we reject the payment proof.
+    println!("⚠️ x402: Payment verification failed — no valid signature or mock proof.");
+    false
 }
 
 pub async fn hold_payment(proof: &str) -> bool {

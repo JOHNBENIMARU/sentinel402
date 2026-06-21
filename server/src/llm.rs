@@ -112,27 +112,3 @@ If the previous agents concluded it is a false positive, write "FALSE POSITIVE" 
     }
     final_resp
 }
-
-/// Explain all findings in a scan result.
-/// Returns a vec of (finding_id, explanation) pairs.
-pub async fn explain_all_findings(
-    findings: &[(String, String, String)], // (title, description, severity)
-    source_code: &str,
-) -> Vec<(String, String)> {
-    let mut explanations = Vec::new();
-
-    for (i, (title, description, severity)) in findings.iter().enumerate() {
-        // Extract ~3 lines around the finding for context
-        let snippet = if source_code.len() > 200 {
-            &source_code[..200]
-        } else {
-            source_code
-        };
-
-        if let Some(explanation) = explain_finding(title, description, severity, snippet).await {
-            explanations.push((format!("S402-{:03}", i + 1), explanation));
-        }
-    }
-
-    explanations
-}

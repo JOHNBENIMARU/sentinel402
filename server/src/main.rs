@@ -54,7 +54,7 @@ use axum::extract::Path;
 async fn get_badge(Path(audit_id): Path<String>) -> impl IntoResponse {
     let sanitized_id = audit_id.replace("..", "").replace("/", "").replace("\\", "");
     let path = format!("data/audits/{}.json", sanitized_id);
-    let risk_score = if let Ok(content) = std::fs::read_to_string(&path) {
+    let risk_score = if let Ok(content) = tokio::fs::read_to_string(&path).await {
         let val: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
         val.get("summary")
             .and_then(|s| s.get("risk_score"))
@@ -75,7 +75,7 @@ async fn get_badge(Path(audit_id): Path<String>) -> impl IntoResponse {
 async fn get_report(Path(audit_id): Path<String>) -> impl IntoResponse {
     let sanitized_id = audit_id.replace("..", "").replace("/", "").replace("\\", "");
     let path = format!("data/audits/{}.json", sanitized_id);
-    if let Ok(content) = std::fs::read_to_string(&path) {
+    if let Ok(content) = tokio::fs::read_to_string(&path).await {
         let val: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
         (StatusCode::OK, Json(val)).into_response()
     } else {
@@ -146,7 +146,8 @@ async fn scan_contract(Json(req): Json<ScanRequest>) -> impl IntoResponse {
             break;
         }
         if finding.severity == "CATASTROPHE" || finding.severity == "DISASTER" || finding.severity == "CALAMITY" {
-            let snippet = if source.len() > 300 { &source[..300] } else { &source };
+            let end = safe_char_boundary(&source, 300);
+            let snippet = &source[..end];
             finding.ai_explanation = llm::explain_finding(
                 &finding.title,
                 &finding.description,
@@ -178,8 +179,20 @@ async fn scan_contract(Json(req): Json<ScanRequest>) -> impl IntoResponse {
     // Save report to disk for badges and detail queries
     let report_path = format!("data/audits/{}.json", audit_id);
     if let Ok(json_str) = serde_json::to_string(&response) {
-        let _ = std::fs::write(&report_path, json_str);
+        let _ = tokio::fs::write(&report_path, json_str).await;
     }
 
     (StatusCode::OK, Json(serde_json::to_value(response).unwrap())).into_response()
+}
+
+/// Find the largest valid char boundary at or before `max_bytes`.
+fn safe_char_boundary(s: &str, max_bytes: usize) -> usize {
+    if max_bytes >= s.len() {
+        return s.len();
+    }
+    let mut boundary = max_bytes;
+    while boundary > 0 && !s.is_char_boundary(boundary) {
+        boundary -= 1;
+    }
+    boundary
 }
