@@ -1,0 +1,21 @@
+# Changelog
+
+All notable changes to Sentinel402 will be documented in this file.
+
+## [2026-06-21] Initial Release
+- Autonomous AI Security Agent for Casper/Odra smart contracts
+- 8 vulnerability detection patterns (CATASTROPHE→HAZARD→SAFE)
+- x402 HTTP 402 micropayment protocol with escrow and refund
+- Casper Wallet integration with cryptographic signature verification
+- MCP stdio server for AI agent interoperability
+- SVG badge generation for README integration
+- On-chain audit proof via AuditRegistry (Odra)
+- Local LLM integration (Ollama/gemma4) with 3-agent Tempest Quorum
+- 27 unit tests across engine, report, MCP, and contract modules
+
+## [2026-06-21] Audit Fixes
+- Fixed UTF-8 panic on multi-byte string slicing
+- Migrated blocking std::fs to async tokio::fs
+- Removed dead code and unused imports
+- Purged node_modules from git history
+- Fixed mock facilitator URL timeout
