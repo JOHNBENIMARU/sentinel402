@@ -53,7 +53,10 @@ pub async fn record_audit_on_chain(
 
     println!(
         "📝 On-chain record: audit={}, risk={}, findings={}, deploy={}",
-        audit_id, risk_score, total_findings, &deploy_hash[..16]
+        audit_id,
+        risk_score,
+        total_findings,
+        &deploy_hash[..16]
     );
 
     Ok(OnChainRecord {

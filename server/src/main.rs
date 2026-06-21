@@ -9,13 +9,13 @@ use serde::{Deserialize, Serialize};
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 
+mod badge;
 mod casper_rpc;
 mod engine;
 mod llm;
+mod mcp;
 mod report;
 mod x402;
-mod mcp;
-mod badge;
 
 #[tokio::main]
 async fn main() {
@@ -52,7 +52,10 @@ async fn health() -> &'static str {
 use axum::extract::Path;
 
 async fn get_badge(Path(audit_id): Path<String>) -> impl IntoResponse {
-    let sanitized_id = audit_id.replace("..", "").replace("/", "").replace("\\", "");
+    let sanitized_id = audit_id
+        .replace("..", "")
+        .replace("/", "")
+        .replace("\\", "");
     let path = format!("data/audits/{}.json", sanitized_id);
     let risk_score = if let Ok(content) = tokio::fs::read_to_string(&path).await {
         let val: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
@@ -66,20 +69,24 @@ async fn get_badge(Path(audit_id): Path<String>) -> impl IntoResponse {
     };
 
     let svg = badge::generate_badge(&risk_score);
-    (
-        [("Content-Type", "image/svg+xml")],
-        svg
-    )
+    ([("Content-Type", "image/svg+xml")], svg)
 }
 
 async fn get_report(Path(audit_id): Path<String>) -> impl IntoResponse {
-    let sanitized_id = audit_id.replace("..", "").replace("/", "").replace("\\", "");
+    let sanitized_id = audit_id
+        .replace("..", "")
+        .replace("/", "")
+        .replace("\\", "");
     let path = format!("data/audits/{}.json", sanitized_id);
     if let Ok(content) = tokio::fs::read_to_string(&path).await {
         let val: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
         (StatusCode::OK, Json(val)).into_response()
     } else {
-        (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Report not found"}))).into_response()
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Report not found"})),
+        )
+            .into_response()
     }
 }
 
@@ -104,33 +111,53 @@ async fn scan_contract(Json(req): Json<ScanRequest>) -> impl IntoResponse {
     // x402 Protocol: check for payment proof
     if req.payment_proof.is_none() {
         let payment_req = x402::create_payment_request(&req.contract_hash);
-        return (StatusCode::PAYMENT_REQUIRED, Json(serde_json::to_value(payment_req).unwrap())).into_response();
+        return (
+            StatusCode::PAYMENT_REQUIRED,
+            Json(serde_json::to_value(payment_req).unwrap()),
+        )
+            .into_response();
     }
 
     let proof = req.payment_proof.unwrap();
     let pub_key = req.public_key.as_deref();
     if !x402::verify_payment(&proof, pub_key, &req.contract_hash).await {
-        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "Invalid payment proof"}))).into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "Invalid payment proof"})),
+        )
+            .into_response();
     }
 
     // Escrow: Hold payment in escrow before processing
     if !x402::hold_payment(&proof).await {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to hold payment in escrow"}))).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Failed to hold payment in escrow"})),
+        )
+            .into_response();
     }
 
     // Payment verified — run security scan
     let source = req.source_code.unwrap_or_default();
-    
+
     // Security Guard: Prevent DoS by limiting source code size to 100KB
     if source.len() > 100_000 {
         x402::refund_payment(&proof).await;
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Source code size exceeds limit of 100KB"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Source code size exceeds limit of 100KB"})),
+        )
+            .into_response();
     }
 
     // Simulated Engine failure for testing refund logic
     if source.contains("trigger_fail") {
         x402::refund_payment(&proof).await;
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Simulated scan engine failure. Payment refunded."}))).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "Simulated scan engine failure. Payment refunded."})),
+        )
+            .into_response();
     }
 
     let mut findings = engine::analyze(&source);
@@ -145,7 +172,10 @@ async fn scan_contract(Json(req): Json<ScanRequest>) -> impl IntoResponse {
         if explanations_generated >= 5 {
             break;
         }
-        if finding.severity == "CATASTROPHE" || finding.severity == "DISASTER" || finding.severity == "CALAMITY" {
+        if finding.severity == "CATASTROPHE"
+            || finding.severity == "DISASTER"
+            || finding.severity == "CALAMITY"
+        {
             let end = safe_char_boundary(&source, 300);
             let snippet = &source[..end];
             finding.ai_explanation = llm::explain_finding(
@@ -153,7 +183,8 @@ async fn scan_contract(Json(req): Json<ScanRequest>) -> impl IntoResponse {
                 &finding.description,
                 &finding.severity,
                 snippet,
-            ).await;
+            )
+            .await;
             explanations_generated += 1;
         }
     }
@@ -182,7 +213,11 @@ async fn scan_contract(Json(req): Json<ScanRequest>) -> impl IntoResponse {
         let _ = tokio::fs::write(&report_path, json_str).await;
     }
 
-    (StatusCode::OK, Json(serde_json::to_value(response).unwrap())).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(response).unwrap()),
+    )
+        .into_response()
 }
 
 /// Find the largest valid char boundary at or before `max_bytes`.

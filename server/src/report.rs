@@ -24,7 +24,10 @@ pub struct Summary {
 }
 
 pub fn summarize(findings: &[Finding]) -> Summary {
-    let catastrophe = findings.iter().filter(|f| f.severity == "CATASTROPHE").count();
+    let catastrophe = findings
+        .iter()
+        .filter(|f| f.severity == "CATASTROPHE")
+        .count();
     let disaster = findings.iter().filter(|f| f.severity == "DISASTER").count();
     let calamity = findings.iter().filter(|f| f.severity == "CALAMITY").count();
     let hazard = findings.iter().filter(|f| f.severity == "HAZARD").count();
@@ -104,51 +107,45 @@ mod tests {
 
     #[test]
     fn test_summarize_high() {
-        let findings = vec![
-            Finding {
-                id: "1".to_string(),
-                severity: "DISASTER".to_string(),
-                title: "High".to_string(),
-                description: "High".to_string(),
-                line: 1,
-                pattern: "pat".to_string(),
-                ai_explanation: None,
-            },
-        ];
+        let findings = vec![Finding {
+            id: "1".to_string(),
+            severity: "DISASTER".to_string(),
+            title: "High".to_string(),
+            description: "High".to_string(),
+            line: 1,
+            pattern: "pat".to_string(),
+            ai_explanation: None,
+        }];
         let summary = summarize(&findings);
         assert_eq!(summary.risk_score, "DISASTER");
     }
 
     #[test]
     fn test_summarize_medium() {
-        let findings = vec![
-            Finding {
-                id: "1".to_string(),
-                severity: "CALAMITY".to_string(),
-                title: "Med".to_string(),
-                description: "Med".to_string(),
-                line: 1,
-                pattern: "pat".to_string(),
-                ai_explanation: None,
-            },
-        ];
+        let findings = vec![Finding {
+            id: "1".to_string(),
+            severity: "CALAMITY".to_string(),
+            title: "Med".to_string(),
+            description: "Med".to_string(),
+            line: 1,
+            pattern: "pat".to_string(),
+            ai_explanation: None,
+        }];
         let summary = summarize(&findings);
         assert_eq!(summary.risk_score, "CALAMITY");
     }
 
     #[test]
     fn test_generate_audit_id() {
-        let findings = vec![
-            Finding {
-                id: "S402-001".to_string(),
-                severity: "DISASTER".to_string(),
-                title: "Title".to_string(),
-                description: "Desc".to_string(),
-                line: 1,
-                pattern: "pat".to_string(),
-                ai_explanation: None,
-            },
-        ];
+        let findings = vec![Finding {
+            id: "S402-001".to_string(),
+            severity: "DISASTER".to_string(),
+            title: "Title".to_string(),
+            description: "Desc".to_string(),
+            line: 1,
+            pattern: "pat".to_string(),
+            ai_explanation: None,
+        }];
         let id1 = generate_audit_id("hash1", &findings);
         let id2 = generate_audit_id("hash2", &findings);
         assert_ne!(id1, id2, "Audit ID should be unique to the contract hash");

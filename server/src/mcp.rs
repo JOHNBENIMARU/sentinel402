@@ -1,7 +1,7 @@
-use std::io::{self, BufRead, Write};
-use serde_json::{json, Value};
 use crate::engine;
 use crate::report;
+use serde_json::{json, Value};
+use std::io::{self, BufRead, Write};
 
 /// Run the server in stdio MCP mode
 pub async fn run_stdio_mcp() {
@@ -88,13 +88,22 @@ pub async fn run_mcp_loop<R: BufRead, W: Write>(reader: R, mut writer: W) {
             }
             "tools/call" => {
                 let params = request.get("params");
-                let name = params.and_then(|p| p.get("name")).and_then(|n| n.as_str()).unwrap_or("");
+                let name = params
+                    .and_then(|p| p.get("name"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("");
                 let arguments = params.and_then(|p| p.get("arguments"));
 
                 if name == "sentinel402_audit" {
                     if let Some(args) = arguments {
-                        let source_code = args.get("source_code").and_then(|s| s.as_str()).unwrap_or("");
-                        let contract_hash = args.get("contract_hash").and_then(|c| c.as_str()).unwrap_or("unknown-mcp");
+                        let source_code = args
+                            .get("source_code")
+                            .and_then(|s| s.as_str())
+                            .unwrap_or("");
+                        let contract_hash = args
+                            .get("contract_hash")
+                            .and_then(|c| c.as_str())
+                            .unwrap_or("unknown-mcp");
 
                         let findings = engine::analyze(source_code);
                         let summary = report::summarize(&findings);

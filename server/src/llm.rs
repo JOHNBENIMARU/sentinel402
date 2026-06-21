@@ -32,7 +32,7 @@ async fn call_ollama(client: &Client, model: &str, prompt: &str) -> Option<Strin
     match client
         .post(OLLAMA_URL)
         .json(&request)
-        .timeout(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(120))
         .send()
         .await
     {
@@ -63,14 +63,18 @@ pub async fn explain_finding(
         "You are Souei, the Shadow Scout of Tempest. Conduct a silent reconnaissance on this potential smart contract vulnerability.\nFinding: {}\nDescription: {}\nCode:\n{}",
         finding_title, finding_description, source_snippet
     );
-    let resp1 = call_ollama(&client, &model, &prompt1).await.unwrap_or_else(|| "Souei reported: No generic issues found.".to_string());
+    let resp1 = call_ollama(&client, &model, &prompt1)
+        .await
+        .unwrap_or_else(|| "Souei reported: No generic issues found.".to_string());
 
     // Agent 2: Wisdom King Raphael (Great Sage) - deep rules evaluation
     let prompt2 = format!(
         "You are Wisdom King Raphael (Great Sage). Evaluate this finding and Souei's shadow analysis: '{}'. Does this violate Casper/Odra smart contract safety conventions?\nFinding: {}\nCode:\n{}",
         resp1, finding_title, source_snippet
     );
-    let resp2 = call_ollama(&client, &model, &prompt2).await.unwrap_or_else(|| "Raphael reported: No platform-specific issues found.".to_string());
+    let resp2 = call_ollama(&client, &model, &prompt2)
+        .await
+        .unwrap_or_else(|| "Raphael reported: No platform-specific issues found.".to_string());
 
     // Agent 3: Chief Auditor (Benimaru - Chief General & Flame Commander)
     let prompt3 = format!(

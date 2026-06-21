@@ -1,0 +1,6 @@
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=-bulk-memory"]
+
+[unstable]
+build-std = ["core", "alloc", "panic_abort"]
+build-std-features = ["compiler_builtins/no-asm"]

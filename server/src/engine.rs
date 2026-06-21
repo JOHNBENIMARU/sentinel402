@@ -4,7 +4,7 @@ use crate::report::Finding;
 pub fn analyze(source: &str) -> Vec<Finding> {
     let mut findings = Vec::new();
     let lines: Vec<&str> = source.lines().collect();
-    
+
     let mut has_transfer = false;
     let mut has_approve = false;
 
@@ -17,7 +17,11 @@ pub fn analyze(source: &str) -> Vec<Finding> {
             if let Some(colon_pos) = trimmed.find(':') {
                 let field = trimmed[..colon_pos].trim().to_string();
                 // Strip visibility modifiers
-                let field = field.replace("pub ", "").replace("pub(crate) ", "").trim().to_string();
+                let field = field
+                    .replace("pub ", "")
+                    .replace("pub(crate) ", "")
+                    .trim()
+                    .to_string();
                 if !field.is_empty() && !field.contains(' ') {
                     mapping_fields.push(field);
                 }
@@ -30,11 +34,22 @@ pub fn analyze(source: &str) -> Vec<Finding> {
         let line_num = i + 1;
 
         // Track CEP-18 features
-        if line.contains("fn transfer(") { has_transfer = true; }
-        if line.contains("fn approve(") { has_approve = true; }
+        if line.contains("fn transfer(") {
+            has_transfer = true;
+        }
+        if line.contains("fn approve(") {
+            has_approve = true;
+        }
 
         // Odra: Unprotected state mutation on privileged function (missing policy/logic guard)
-        if line.contains("pub fn") && (line.contains("set_") || line.contains("update_") || line.contains("mint") || line.contains("record_") || line.contains("delete_") || line.contains("remove_")) {
+        if line.contains("pub fn")
+            && (line.contains("set_")
+                || line.contains("update_")
+                || line.contains("mint")
+                || line.contains("record_")
+                || line.contains("delete_")
+                || line.contains("remove_"))
+        {
             if !has_logic_guard_nearby(&lines, i) {
                 findings.push(Finding {
                     id: format!("S402-{:03}", findings.len() + 1),
@@ -52,7 +67,9 @@ pub fn analyze(source: &str) -> Vec<Finding> {
         for field in &mapping_fields {
             let set_pattern = format!("{}.set(", field);
             let self_set = format!("self.{}.set(", field);
-            if (line.contains(&set_pattern) || line.contains(&self_set)) && !has_logic_guard_nearby(&lines, i) {
+            if (line.contains(&set_pattern) || line.contains(&self_set))
+                && !has_logic_guard_nearby(&lines, i)
+            {
                 findings.push(Finding {
                     id: format!("S402-{:03}", findings.len() + 1),
                     severity: "CATASTROPHE".to_string(),
@@ -67,7 +84,10 @@ pub fn analyze(source: &str) -> Vec<Finding> {
         }
 
         // Casper: Unsafe transfer_from_purse_to_account
-        if line.contains("transfer_from_purse_to_account") && !line.contains(".unwrap_or_revert") && !line.contains("match") {
+        if line.contains("transfer_from_purse_to_account")
+            && !line.contains(".unwrap_or_revert")
+            && !line.contains("match")
+        {
             findings.push(Finding {
                 id: format!("S402-{:03}", findings.len() + 1),
                 severity: "DISASTER".to_string(),
@@ -111,7 +131,9 @@ pub fn analyze(source: &str) -> Vec<Finding> {
                 id: format!("S402-{:03}", findings.len() + 1),
                 severity: "CALAMITY".to_string(),
                 title: "Potential arithmetic overflow on U256".to_string(),
-                description: "U256 arithmetic without checked_add/checked_mul. May overflow silently.".to_string(),
+                description:
+                    "U256 arithmetic without checked_add/checked_mul. May overflow silently."
+                        .to_string(),
                 line: line_num,
                 pattern: "overflow".to_string(),
                 ai_explanation: None,
@@ -119,7 +141,9 @@ pub fn analyze(source: &str) -> Vec<Finding> {
         }
 
         // Casper: hardcoded key names (bad practice for upgradability)
-        if (line.contains("runtime::put_key(\"") || line.contains("storage::new_uref(")) && !line.trim_start().starts_with("//") {
+        if (line.contains("runtime::put_key(\"") || line.contains("storage::new_uref("))
+            && !line.trim_start().starts_with("//")
+        {
             findings.push(Finding {
                 id: format!("S402-{:03}", findings.len() + 1),
                 severity: "HAZARD".to_string(),
@@ -164,16 +188,16 @@ fn has_logic_guard_nearby(lines: &[&str], entry_line: usize) -> bool {
     let end = (entry_line + 20).min(lines.len());
     for i in start..end {
         let l = lines[i];
-        if l.contains("env::caller()") 
-            || l.contains("self.env().caller()") 
-            || l.contains("get_caller") 
+        if l.contains("env::caller()")
+            || l.contains("self.env().caller()")
+            || l.contains("get_caller")
             || l.contains("assert!")
             || l.contains("assert_eq!")
             || l.contains("revert(")
             || l.contains("unwrap_or_revert")
             || l.contains("access_control")
             || l.contains("assert_role")
-            || l.contains("is_admin") 
+            || l.contains("is_admin")
             || l.contains("only_owner")
         {
             return true;
@@ -194,8 +218,13 @@ mod tests {
             }
         "#;
         let findings = analyze(code);
-        let found = findings.iter().any(|f| f.pattern == "odra_unprotected_mutation");
-        assert!(found, "Should detect unprotected state mutation on set_ fn without guards");
+        let found = findings
+            .iter()
+            .any(|f| f.pattern == "odra_unprotected_mutation");
+        assert!(
+            found,
+            "Should detect unprotected state mutation on set_ fn without guards"
+        );
     }
 
     #[test]
@@ -208,8 +237,13 @@ mod tests {
             }
         "#;
         let findings = analyze(code);
-        let found = findings.iter().any(|f| f.pattern == "odra_unprotected_mutation");
-        assert!(!found, "Should NOT detect unprotected state mutation when logic guard is present");
+        let found = findings
+            .iter()
+            .any(|f| f.pattern == "odra_unprotected_mutation");
+        assert!(
+            !found,
+            "Should NOT detect unprotected state mutation when logic guard is present"
+        );
     }
 
     #[test]
@@ -221,8 +255,13 @@ mod tests {
             }
         "#;
         let findings = analyze(code);
-        let unprotected = findings.iter().any(|f| f.pattern == "odra_unprotected_mutation");
-        assert!(!unprotected, "AccessControl assert_role should be recognized as a valid logic guard");
+        let unprotected = findings
+            .iter()
+            .any(|f| f.pattern == "odra_unprotected_mutation");
+        assert!(
+            !unprotected,
+            "AccessControl assert_role should be recognized as a valid logic guard"
+        );
     }
 
     #[test]
@@ -238,8 +277,13 @@ mod tests {
             }
         "#;
         let findings = analyze(code);
-        let found = findings.iter().any(|f| f.pattern == "odra_mapping_overwrite");
-        assert!(found, "Should flag arbitrary Mapping overwrite if no auth guard is present");
+        let found = findings
+            .iter()
+            .any(|f| f.pattern == "odra_mapping_overwrite");
+        assert!(
+            found,
+            "Should flag arbitrary Mapping overwrite if no auth guard is present"
+        );
     }
 
     #[test]
@@ -249,8 +293,13 @@ mod tests {
             // execution continues without checking result
         "#;
         let findings = analyze(code);
-        let found = findings.iter().any(|f| f.pattern == "casper_unsafe_transfer");
-        assert!(found, "Should catch unsafe purse transfer lacking unwrap_or_revert / match");
+        let found = findings
+            .iter()
+            .any(|f| f.pattern == "casper_unsafe_transfer");
+        assert!(
+            found,
+            "Should catch unsafe purse transfer lacking unwrap_or_revert / match"
+        );
     }
 
     #[test]
@@ -261,7 +310,10 @@ mod tests {
         "#;
         let findings = analyze(code);
         let found = findings.iter().any(|f| f.pattern == "reentrancy");
-        assert!(found, "Should flag potential reentrancy if state update is after call_contract");
+        assert!(
+            found,
+            "Should flag potential reentrancy if state update is after call_contract"
+        );
     }
 
     #[test]
@@ -272,7 +324,10 @@ mod tests {
         "#;
         let findings = analyze(code);
         let found = findings.iter().any(|f| f.pattern == "reentrancy");
-        assert!(!found, "Should not flag reentrancy when state update occurs before call_contract");
+        assert!(
+            !found,
+            "Should not flag reentrancy when state update occurs before call_contract"
+        );
     }
 
     #[test]
@@ -282,7 +337,10 @@ mod tests {
         "#;
         let findings = analyze(code);
         let found = findings.iter().any(|f| f.pattern == "overflow");
-        assert!(found, "Should catch potential arithmetic overflow on standard + operator with U256");
+        assert!(
+            found,
+            "Should catch potential arithmetic overflow on standard + operator with U256"
+        );
     }
 
     #[test]
@@ -294,7 +352,10 @@ mod tests {
         "#;
         let findings = analyze(code);
         let found = findings.iter().any(|f| f.pattern == "cep18_compliance");
-        assert!(found, "Should catch CEP-18 non-compliance (transfer without approve)");
+        assert!(
+            found,
+            "Should catch CEP-18 non-compliance (transfer without approve)"
+        );
     }
 
     #[test]
@@ -305,7 +366,10 @@ mod tests {
         "#;
         let findings = analyze(code);
         let found = findings.iter().any(|f| f.pattern == "cep18_compliance");
-        assert!(!found, "Should NOT flag CEP-18 non-compliance when both transfer and approve are present");
+        assert!(
+            !found,
+            "Should NOT flag CEP-18 non-compliance when both transfer and approve are present"
+        );
     }
 
     #[test]
@@ -342,8 +406,13 @@ mod tests {
             }
         "#;
         let findings = analyze(code);
-        let found = findings.iter().any(|f| f.pattern == "odra_mapping_overwrite");
-        assert!(found, "Should detect mapping overwrite even with pub(crate) visibility modifiers");
+        let found = findings
+            .iter()
+            .any(|f| f.pattern == "odra_mapping_overwrite");
+        assert!(
+            found,
+            "Should detect mapping overwrite even with pub(crate) visibility modifiers"
+        );
     }
 
     #[test]
@@ -360,8 +429,10 @@ mod tests {
     fn test_edge_case_near_file_bounds() {
         let code = "self.balances.set(&user, val);";
         let findings = analyze(code);
-        assert_eq!(findings.len(), 0, "Should analyze small strings without out-of-bounds panic");
+        assert_eq!(
+            findings.len(),
+            0,
+            "Should analyze small strings without out-of-bounds panic"
+        );
     }
 }
-
-
