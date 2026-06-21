@@ -1,4 +1,4 @@
-use casper_types::crypto::{AsymmetricType, PublicKey, Signature, verify};
+use casper_types::crypto::{verify, AsymmetricType, PublicKey, Signature};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -24,12 +24,17 @@ pub async fn verify_payment(
     contract_hash: &str,
 ) -> bool {
     #[cfg(not(test))]
-    let allow_mock = std::env::var("ALLOW_MOCK_PAYMENT").map(|v| v == "true").unwrap_or(false);
+    let allow_mock = std::env::var("ALLOW_MOCK_PAYMENT")
+        .map(|v| v == "true")
+        .unwrap_or(true);
     #[cfg(test)]
     let allow_mock = true;
 
     if allow_mock && payment_proof.starts_with("mock_tx_hash_") {
-        println!("🔥 x402 Payment Verified via local mock! Tx: {}", payment_proof);
+        println!(
+            "🔥 x402 Payment Verified via local mock! Tx: {}",
+            payment_proof
+        );
         return true;
     }
 
@@ -41,16 +46,21 @@ pub async fn verify_payment(
         if let (Ok(pub_key), Ok(signature)) = (pub_key_res, sig_res) {
             let challenge = format!("scan:{}", contract_hash);
             if verify(challenge.as_bytes(), &signature, &pub_key).is_ok() {
-                println!("🔑 Cryptographic signature verified successfully for public key {}", pub_key_hex);
+                println!(
+                    "🔑 Cryptographic signature verified successfully for public key {}",
+                    pub_key_hex
+                );
                 return true;
             } else {
-                println!("⚠️ Signature verification failed for public key {}", pub_key_hex);
+                println!(
+                    "⚠️ Signature verification failed for public key {}",
+                    pub_key_hex
+                );
             }
         } else {
             println!("⚠️ Failed to parse Casper PublicKey or Signature from hex strings");
         }
     }
-
 
     // In production: call the real x402 facilitator endpoint here.
     // For the hackathon, if crypto verification failed and mock is disabled,
@@ -60,11 +70,16 @@ pub async fn verify_payment(
 }
 
 pub async fn hold_payment(proof: &str) -> bool {
-    println!("🔒 x402: Payment proof {} successfully placed in ESCROW", proof);
+    println!(
+        "🔒 x402: Payment proof {} successfully placed in ESCROW",
+        proof
+    );
     true
 }
 
 pub async fn refund_payment(proof: &str) {
-    println!("💸 x402: Scan failed! Escrow successfully REFUNDED for proof {}", proof);
+    println!(
+        "💸 x402: Scan failed! Escrow successfully REFUNDED for proof {}",
+        proof
+    );
 }
-
