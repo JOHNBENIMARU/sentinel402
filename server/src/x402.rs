@@ -12,7 +12,7 @@ pub struct PaymentRequired {
 pub fn create_payment_request(contract_hash: &str) -> PaymentRequired {
     PaymentRequired {
         amount_cspr: 1.0, // 1 CSPR per scan
-        facilitator_url: "https://mock-x402.casper.network/facilitator".to_string(),
+        facilitator_url: "https://x402.casper.network/facilitator".to_string(),
         payment_address: "account-hash-sentinel402-treasury".to_string(),
         memo: format!("scan:{}", contract_hash),
     }
@@ -26,7 +26,7 @@ pub async fn verify_payment(
     #[cfg(not(test))]
     let allow_mock = std::env::var("ALLOW_MOCK_PAYMENT")
         .map(|v| v == "true")
-        .unwrap_or(true);
+        .unwrap_or(false); // Disabled by default — set ALLOW_MOCK_PAYMENT=true for demo
     #[cfg(test)]
     let allow_mock = true;
 

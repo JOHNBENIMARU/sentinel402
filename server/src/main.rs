@@ -153,15 +153,6 @@ async fn scan_contract(Json(req): Json<ScanRequest>) -> impl IntoResponse {
             .into_response();
     }
 
-    // Simulated Engine failure for testing refund logic
-    if source.contains("trigger_fail") {
-        x402::refund_payment(&proof).await;
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "Simulated scan engine failure. Payment refunded."})),
-        )
-            .into_response();
-    }
 
     let mut findings = engine::analyze(&source);
     let summary = report::summarize(&findings);
@@ -170,6 +161,7 @@ async fn scan_contract(Json(req): Json<ScanRequest>) -> impl IntoResponse {
     // AI Enhancement: use local LLM (Ollama/gemma4) to explain findings
     // Security Guard: Limit to max 5 explanations to prevent API block/DoS
     println!("🧠 Running AI analysis on {} findings...", findings.len());
+    let source_lines: Vec<&str> = source.lines().collect();
     let mut explanations_generated = 0;
     for finding in findings.iter_mut() {
         if explanations_generated >= 5 {
@@ -179,13 +171,21 @@ async fn scan_contract(Json(req): Json<ScanRequest>) -> impl IntoResponse {
             || finding.severity == "DISASTER"
             || finding.severity == "CALAMITY"
         {
-            let end = safe_char_boundary(&source, 300);
-            let snippet = &source[..end];
+            // Extract code snippet around the actual finding line (±7 lines)
+            let snippet = if finding.line > 0 && finding.line <= source_lines.len() {
+                let start = finding.line.saturating_sub(7);
+                let end = (finding.line + 7).min(source_lines.len());
+                source_lines[start..end].join("\n")
+            } else {
+                // Fallback: first 300 bytes
+                let end = safe_char_boundary(&source, 300);
+                source[..end].to_string()
+            };
             finding.ai_explanation = llm::explain_finding(
                 &finding.title,
                 &finding.description,
                 &finding.severity,
-                snippet,
+                &snippet,
             )
             .await;
             explanations_generated += 1;
