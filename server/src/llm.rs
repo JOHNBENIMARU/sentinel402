@@ -162,6 +162,54 @@ fn get_fallback(finding_title: &str) -> String {
     }
 }
 
+// ─── Reasoning Extraction (Model-Agnostic) ──────────────────────────
+
+/// Extract and separate reasoning blocks from the model response.
+/// Supports multiple formats:
+/// - Qwen3: <think>...</think>
+/// - DeepSeek: <reasoning>...</reasoning>
+/// - Generic: content between markers is stripped, clean answer returned
+///
+/// This is model-agnostic: if no thinking tags are found, the full
+/// response is returned unchanged. Works with gemma4, hermes, qwen3, etc.
+fn extract_reasoning(raw: &str) -> (Option<String>, String) {
+    let mut reasoning = None;
+    let mut clean = raw.to_string();
+
+    // Try <think>...</think> (Qwen3)
+    if let Some(start) = clean.find("<think>") {
+        if let Some(end) = clean.find("</think>") {
+            let think_content = clean[start + 7..end].trim().to_string();
+            if !think_content.is_empty() {
+                reasoning = Some(think_content);
+            }
+            clean = format!("{}{}", &clean[..start], &clean[end + 8..]).trim().to_string();
+        }
+    }
+
+    // Try <reasoning>...</reasoning> (DeepSeek)
+    if reasoning.is_none() {
+        if let Some(start) = clean.find("<reasoning>") {
+            if let Some(end) = clean.find("</reasoning>") {
+                let think_content = clean[start + 11..end].trim().to_string();
+                if !think_content.is_empty() {
+                    reasoning = Some(think_content);
+                }
+                clean = format!("{}{}", &clean[..start], &clean[end + 12..]).trim().to_string();
+            }
+        }
+    }
+
+    // If after extraction the clean text is empty, use reasoning as response
+    if clean.is_empty() {
+        if let Some(ref r) = reasoning {
+            clean = r.clone();
+        }
+    }
+
+    (reasoning, clean)
+}
+
 // ─── Core LLM Call ──────────────────────────────────────────────────
 
 async fn call_ollama(client: &Client, model: &str, prompt: &str) -> Option<String> {
@@ -180,12 +228,16 @@ async fn call_ollama(client: &Client, model: &str, prompt: &str) -> Option<Strin
     {
         Ok(resp) => {
             if let Ok(body) = resp.json::<OllamaResponse>().await {
-                let text = body.response.trim().to_string();
-                if text.is_empty() {
-                    None
-                } else {
-                    Some(text)
+                let raw = body.response.trim().to_string();
+                if raw.is_empty() {
+                    return None;
                 }
+                // Post-process: extract reasoning, return clean answer
+                let (reasoning, clean) = extract_reasoning(&raw);
+                if let Some(ref thought) = reasoning {
+                    println!("🧠 LLM: Model used chain-of-thought ({} chars reasoning)", thought.len());
+                }
+                Some(clean)
             } else {
                 None
             }
@@ -225,7 +277,7 @@ pub async fn explain_finding(
 
     // Agent 1: Souei (Shadow Scout) — reconnaissance & analysis
     let prompt1 = format!(
-        "You are Souei, the Shadow Scout of Tempest. Conduct a silent reconnaissance on this potential smart contract vulnerability.\nFinding: {}\nDescription: {}\nCode:\n{}",
+        "You are Souei, a security reconnaissance specialist. Analyze this smart contract vulnerability step by step.\n\nFirst, identify the vulnerable pattern. Then determine the scope of impact.\n\nFinding: {}\nDescription: {}\nCode:\n{}",
         finding_title, finding_description, source_snippet
     );
     let resp1 = match call_ollama_validated(&client, &model, &prompt1, ValidationStage::Scout).await
@@ -242,7 +294,7 @@ pub async fn explain_finding(
 
     // Agent 2: Wisdom King Raphael (Great Sage) — deep rules evaluation
     let prompt2 = format!(
-        "You are Wisdom King Raphael (Great Sage). Evaluate this finding and Souei's shadow analysis: '{}'. Does this violate Casper/Odra smart contract safety conventions?\nFinding: {}\nCode:\n{}",
+        "You are Raphael, a smart contract security evaluator. Think through the following analysis carefully.\n\nPrevious analysis: '{}'\n\nDoes this violate smart contract safety conventions? Consider:\n1. Access control patterns\n2. State mutation safety\n3. Known attack vectors (reentrancy, overflow, unauthorized access)\n\nFinding: {}\nCode:\n{}",
         resp1, finding_title, source_snippet
     );
     let resp2 =
@@ -259,22 +311,24 @@ pub async fn explain_finding(
             }
         };
 
-    // Agent 3: Chief Auditor (Benimaru — Flame Commander)
+    // Agent 3: Chief Auditor (Benimaru — Final Verdict)
     let prompt3 = format!(
-        r#"You are Benimaru, the Flame Commander and Chief General of Tempest. Review:
-1. Souei's scouting analysis: {resp1}
-2. Wisdom King Raphael's rule evaluation: {resp2}
-3. Original Threat level: {title} ({severity})
-4. Code Context:
+        r#"You are a chief security auditor. Review two prior analyses and deliver a final verdict.
+
+Analysis 1: {resp1}
+Analysis 2: {resp2}
+Threat: {title} ({severity})
+Code:
 ```
 {code}
 ```
 
-Issue the final combat tactical verdict. Explain:
-- Why this is dangerous (1 sentence)
-- Attack scenario (1 sentence)
-- How to fix it (1-2 sentences)
-If the previous agents concluded it is a false positive, write "FALSE POSITIVE" and explain why. Be extremely technical, concise, and direct."#,
+Think step by step, then respond in EXACTLY this format:
+Why dangerous: (1 sentence)
+Attack scenario: (1 sentence)
+Fix: (1-2 sentences)
+
+If the analyses concluded this is safe, write "FALSE POSITIVE" and explain why. Be technical and concise."#,
         resp1 = resp1,
         resp2 = resp2,
         title = finding_title,
@@ -358,5 +412,39 @@ mod tests {
             assert!(fb.contains("Attack scenario"), "Fallback for '{}' must contain 'Attack scenario'", title);
             assert!(fb.contains("Fix:"), "Fallback for '{}' must contain 'Fix:'", title);
         }
+    }
+
+    #[test]
+    fn test_extract_reasoning_qwen3_think() {
+        let input = "<think>Let me analyze this code for vulnerabilities...</think>Why dangerous: The function lacks access control.";
+        let (reasoning, clean) = extract_reasoning(input);
+        assert!(reasoning.is_some(), "Should extract Qwen3 think block");
+        assert!(reasoning.unwrap().contains("analyze this code"));
+        assert!(clean.contains("Why dangerous"));
+        assert!(!clean.contains("<think>"), "Clean output must not contain think tags");
+    }
+
+    #[test]
+    fn test_extract_reasoning_deepseek() {
+        let input = "<reasoning>Checking access patterns...</reasoning>This is vulnerable because the state can be mutated.";
+        let (reasoning, clean) = extract_reasoning(input);
+        assert!(reasoning.is_some(), "Should extract DeepSeek reasoning block");
+        assert!(!clean.contains("<reasoning>"));
+    }
+
+    #[test]
+    fn test_extract_reasoning_passthrough() {
+        let input = "Why dangerous: Unauthorized access.\nAttack scenario: Direct call.\nFix: Add guard.";
+        let (reasoning, clean) = extract_reasoning(input);
+        assert!(reasoning.is_none(), "No reasoning tags = no extraction");
+        assert_eq!(clean, input, "Clean output should be identical to input");
+    }
+
+    #[test]
+    fn test_extract_reasoning_only_think_block() {
+        let input = "<think>The vulnerability is real because there are no access checks on set_balance.</think>";
+        let (reasoning, clean) = extract_reasoning(input);
+        assert!(reasoning.is_some());
+        assert!(!clean.is_empty(), "If only think block, use it as response");
     }
 }
