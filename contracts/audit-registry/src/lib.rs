@@ -31,9 +31,9 @@ impl AuditRegistry {
         timestamp: u64,
     ) {
         let caller = self.env().caller();
-        let owner = self.owner.get_or_revert_with(OdraError::user(1, "OwnerNotSet"));
+        let owner = self.owner.get_or_revert_with(OdraError::user(1));
         if caller != owner {
-            self.env().revert(OdraError::user(2, "NotOwner"));
+            self.env().revert(OdraError::user(2));
         }
 
         let record = format!(
@@ -50,7 +50,7 @@ impl AuditRegistry {
 
     /// Get contract owner
     pub fn get_owner(&self) -> Address {
-        self.owner.get_or_revert_with(OdraError::user(1, "OwnerNotSet"))
+        self.owner.get_or_revert_with(OdraError::user(1))
     }
 }
 

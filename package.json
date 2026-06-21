@@ -1,8 +1,6 @@
 {
-  "dependencies": {
-    "casper-js-sdk": "^2.15.5"
-  },
   "devDependencies": {
+    "casper-js-sdk": "^2.15.7",
     "esbuild": "^0.28.1"
   }
 }

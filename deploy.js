@@ -8,7 +8,7 @@ const {
   CLValueBuilder
 } = require('casper-js-sdk');
 
-const RPC_API = 'http://rpc.testnet.casperlabs.io:7777/rpc';
+const RPC_API = 'http://65.109.89.88:7777/rpc';
 const casperClient = new CasperClient(RPC_API);
 const contractClient = new Contracts.Contract(casperClient);
 
@@ -17,14 +17,15 @@ async function deploy() {
     console.log("🔥 Starting Casper deployment...");
     
     // 1. Read Secret Key from secret_key.pem
-    if (!fs.existsSync('./secret_key.pem')) {
+    const keyPath = './contracts/audit-registry/keys/secret_key.pem';
+    if (!fs.existsSync(keyPath)) {
       console.error("❌ ERROR: secret_key.pem not found in the sentinel402 directory!");
       console.log("👉 How to fix: Open Casper Wallet -> Account -> Export Private Key -> Save as 'secret_key.pem' in D:\\sentinel402\\");
       return;
     }
     
     console.log("🔑 Reading private key...");
-    const keyPair = Keys.Ed25519.parsePrivateKeyFile('./secret_key.pem');
+    const keyPair = Keys.Ed25519.loadKeyPairFromPrivateFile(keyPath);
     console.log("💳 Deploying from public key:", keyPair.publicKey.toHex());
 
     // 2. Read WASM
@@ -37,7 +38,12 @@ async function deploy() {
 
     // 3. Create Deploy
     console.log("📦 Creating deploy transaction...");
-    const runtimeArgs = RuntimeArgs.fromMap({});
+    const runtimeArgs = RuntimeArgs.fromMap({
+      "odra_cfg_package_hash_key_name": CLValueBuilder.string("audit_registry_package"),
+      "odra_cfg_allow_key_override": CLValueBuilder.bool(true),
+      "odra_cfg_is_upgradable": CLValueBuilder.bool(true),
+      "odra_cfg_constructor": CLValueBuilder.string("init")
+    });
 
     const deploy = DeployUtil.makeDeploy(
       new DeployUtil.DeployParams(
