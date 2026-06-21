@@ -1,0 +1,3 @@
+# Mark bundled/generated JS as vendored so GitHub Linguist ignores it
+frontend/deploy-bundle.js linguist-vendored
+frontend/deploy-bundle.js linguist-generated
