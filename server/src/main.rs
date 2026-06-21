@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 
+mod ast;
 mod badge;
 mod casper_rpc;
 mod engine;

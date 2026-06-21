@@ -13,3 +13,5 @@ reqwest = { version = "0.12", features = ["json"] }
 sha2 = "0.10"
 hex = "0.4"
 casper-types = "6.1.0"
+tree-sitter = "0.24"
+tree-sitter-rust = "0.23"
