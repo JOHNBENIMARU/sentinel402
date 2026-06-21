@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel402 — AI Security Scanner</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔥 Sentinel402</h1>
+            <p class="subtitle">AI Security Agent × x402 Micropayments × Casper Network</p>
+        </header>
+
+        <main>
+            <section class="scan-form">
+                <h2>Scan Contract</h2>
+                <textarea id="source-code" placeholder="Paste your Casper smart contract source code (Rust)..." rows="12"></textarea>
+                <input type="text" id="contract-hash" placeholder="Contract hash (optional)">
+                <button id="scan-btn" onclick="submitScan()">⚡ Scan for Vulnerabilities</button>
+            </section>
+
+            <section id="results" class="results hidden">
+                <h2>Audit Report</h2>
+                <div id="summary" class="summary-card"></div>
+                <div id="findings-list"></div>
+            </section>
+
+            <section id="history" class="history-section">
+                <h2>Scan History</h2>
+                <div id="history-list">
+                    <p class="small-text">No scans yet. Paste a contract above to start.</p>
+                </div>
+            </section>
+
+            <div id="payment-modal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <h2>HTTP 402: Payment Required</h2>
+                    <p class="modal-descr">To run this security scan, please authorize an x402 micropayment.</p>
+                    
+                    <div class="payment-details">
+                        <p><strong>Amount:</strong> <span id="pay-amount"></span></p>
+                        <p><strong>Recipient:</strong> <code id="pay-address"></code></p>
+                    </div>
+
+                    <!-- Casper Wallet Integration -->
+                    <div id="casper-wallet-integration" class="wallet-integration-box">
+                        <h3>🦊 Casper Wallet</h3>
+                        
+                        <!-- When wallet is not connected -->
+                        <div id="wallet-connect-section">
+                            <p class="wallet-status-text">Connect your wallet to sign the payment verification challenge.</p>
+                            <button id="connect-wallet-btn" class="wallet-btn" onclick="connectCasperWallet()">Connect Casper Wallet</button>
+                        </div>
+
+                        <!-- When wallet is connected -->
+                        <div id="wallet-sign-section" class="hidden">
+                            <div class="wallet-connected-info">
+                                <span class="connected-badge">Connected</span>
+                                <code id="wallet-address-display"></code>
+                            </div>
+                            <button id="sign-tx-btn" class="wallet-btn sign-btn" onclick="payWithCasperWallet()">✍️ Sign & Pay with Casper Wallet</button>
+                        </div>
+                    </div>
+
+                    <!-- Warning if wallet is not detected -->
+                    <div id="wallet-not-detected" class="wallet-warning hidden">
+                        <p>⚠️ <strong>Casper Wallet not detected!</strong> Install the extension to use cryptographic signatures.</p>
+                        <a href="https://casperwallet.io/" target="_blank" class="download-link">Get Casper Wallet →</a>
+                    </div>
+
+                    <!-- Fallback / Simulation -->
+                    <div class="fallback-section">
+                        <span class="fallback-divider">OR</span>
+                        <button id="pay-btn" class="secondary-btn" onclick="simulateAgentPayment()">Simulate Agent Payment (Mock Fallback)</button>
+                    </div>
+
+                    <p class="small-text">In a real environment, your AI agent's wallet intercepts this 402 challenge and pays automatically.</p>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Powered by Benimaru 🔥 | Casper Agentic Buildathon 2026</p>
+        </footer>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

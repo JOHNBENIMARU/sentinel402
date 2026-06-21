@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Safe Casper Deployer</title>
+    <title>Safe Casper Deployer</title>
+    <script src="/deploy-bundle.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #0a0a0f; color: #fff; padding: 2rem; max-width: 600px; margin: 0 auto; }
+        .box { background: rgba(255,255,255,0.05); padding: 2rem; border-radius: 12px; border: 1px solid #4ecdc4; }
+        button { background: #4ecdc4; color: #000; border: none; padding: 1rem; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; margin-bottom: 1rem;}
+        button:hover { opacity: 0.9; }
+        #status { margin-top: 1rem; color: #a78bfa; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>🛠️ Safe Local Deployer</h2>
+        <p>This tool connects to your Casper Wallet locally. Your private key never leaves the wallet.</p>
+        
+        <button id="connectBtn">1. Connect Casper Wallet</button>
+        <button id="deployBtn" disabled style="opacity: 0.5;">2. Sign & Deploy AuditRegistry.wasm</button>
+        
+        <div id="status"></div>
+    </div>
+
+    <script>
+        let publicKeyHex = "";
+        let provider = null;
+
+        function getProvider() {
+            if (window.CasperWalletProvider) {
+                return window.CasperWalletProvider();
+            } else if (window.casperlabsHelper) {
+                return window.casperlabsHelper;
+            }
+            return null;
+        }
+
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            provider = getProvider();
+            if (!provider) {
+                alert("Casper Wallet extension not found! Try refreshing the page, or ensure the extension is unlocked.");
+                return;
+            }
+            try {
+                await provider.requestConnection();
+                publicKeyHex = await provider.getActivePublicKey();
+                document.getElementById('status').innerText = "Connected: " + publicKeyHex;
+                document.getElementById('deployBtn').disabled = false;
+                document.getElementById('deployBtn').style.opacity = "1";
+            } catch (e) {
+                document.getElementById('status').innerText = "Error: " + e.message;
+            }
+        });
+
+        document.getElementById('deployBtn').addEventListener('click', async () => {
+            try {
+                document.getElementById('status').innerText = "Preparing deploy...";
+                
+                const deployHash = await window.runDeploy(publicKeyHex);
+                
+                document.getElementById('status').innerHTML = `
+                    <span style="color: #4ecdc4">✅ SUCCESS! Deploy Hash:</span><br>
+                    <strong>${deployHash}</strong><br><br>
+                    Send this hash to Beninmaru!
+                `;
+            } catch (e) {
+                console.error(e);
+                document.getElementById('status').innerText = "Error: " + e.message;
+            }
+        });
+    </script>
+</body>
+</html>

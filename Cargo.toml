@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "server",
+    "contracts/audit-registry",
+]
+resolver = "2"
