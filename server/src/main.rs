@@ -13,6 +13,7 @@ mod ast;
 mod badge;
 mod casper_rpc;
 mod engine;
+mod exploits;
 mod llm;
 mod mcp;
 mod report;

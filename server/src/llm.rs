@@ -275,13 +275,24 @@ pub async fn explain_finding(
     let model = get_model();
     let fallback = get_fallback(finding_title);
 
-    // Agent 1: Souei (Shadow Scout) — reconnaissance & analysis
-    let prompt1 = format!(
+    // Phase 1: Parallel reconnaissance — Souei and Raphael run simultaneously
+    // (Inspired by RAXCLAW's parallel agent architecture, adapted for LLM quorum)
+    let prompt_scout = format!(
         "You are Souei, a security reconnaissance specialist. Analyze this smart contract vulnerability step by step.\n\nFirst, identify the vulnerable pattern. Then determine the scope of impact.\n\nFinding: {}\nDescription: {}\nCode:\n{}",
         finding_title, finding_description, source_snippet
     );
-    let resp1 = match call_ollama_validated(&client, &model, &prompt1, ValidationStage::Scout).await
-    {
+    let prompt_evaluator = format!(
+        "You are Raphael, a smart contract security evaluator. Think through the following code carefully.\n\nDoes this violate smart contract safety conventions? Consider:\n1. Access control patterns\n2. State mutation safety\n3. Known attack vectors (reentrancy, overflow, unauthorized access)\n\nFinding: {}\nDescription: {}\nCode:\n{}",
+        finding_title, finding_description, source_snippet
+    );
+
+    // Launch both agents in parallel (tokio::join! — no wasted time)
+    let (scout_result, evaluator_result) = tokio::join!(
+        call_ollama_validated(&client, &model, &prompt_scout, ValidationStage::Scout),
+        call_ollama_validated(&client, &model, &prompt_evaluator, ValidationStage::Evaluator),
+    );
+
+    let resp1 = match scout_result {
         Some(r) => {
             println!("✅ LLM: Souei (Scout) passed validation.");
             r
@@ -292,26 +303,25 @@ pub async fn explain_finding(
         }
     };
 
-    // Agent 2: Wisdom King Raphael (Great Sage) — deep rules evaluation
-    let prompt2 = format!(
-        "You are Raphael, a smart contract security evaluator. Think through the following analysis carefully.\n\nPrevious analysis: '{}'\n\nDoes this violate smart contract safety conventions? Consider:\n1. Access control patterns\n2. State mutation safety\n3. Known attack vectors (reentrancy, overflow, unauthorized access)\n\nFinding: {}\nCode:\n{}",
-        resp1, finding_title, source_snippet
-    );
-    let resp2 =
-        match call_ollama_validated(&client, &model, &prompt2, ValidationStage::Evaluator).await {
-            Some(r) => {
-                println!("✅ LLM: Raphael (Evaluator) passed validation.");
-                r
-            }
-            None => {
-                println!(
-                    "⚠️ LLM: Raphael (Evaluator) failed validation, using Great Sage fallback."
-                );
-                return Some(fallback);
+    let resp2 = match evaluator_result {
+        Some(r) => {
+            println!("✅ LLM: Raphael (Evaluator) passed validation.");
+            r
+        }
+        None => {
+            println!("⚠️ LLM: Raphael (Evaluator) failed validation, using Great Sage fallback.");
+            return Some(fallback);
             }
         };
 
     // Agent 3: Chief Auditor (Benimaru — Final Verdict)
+    // Enrich with exploit knowledge base (our lightweight alternative to RAXCLAW's Qdrant)
+    let exploit_matches = crate::exploits::search_exploits(source_snippet);
+    let exploit_ctx = crate::exploits::format_exploit_context(&exploit_matches);
+    if !exploit_matches.is_empty() {
+        println!("🗃️ Exploit DB: {} known patterns matched", exploit_matches.len());
+    }
+
     let prompt3 = format!(
         r#"You are a chief security auditor. Review two prior analyses and deliver a final verdict.
 
@@ -322,7 +332,7 @@ Code:
 ```
 {code}
 ```
-
+{exploits}
 Think step by step, then respond in EXACTLY this format:
 Why dangerous: (1 sentence)
 Attack scenario: (1 sentence)
@@ -333,7 +343,8 @@ If the analyses concluded this is safe, write "FALSE POSITIVE" and explain why. 
         resp2 = resp2,
         title = finding_title,
         severity = severity,
-        code = source_snippet
+        code = source_snippet,
+        exploits = exploit_ctx
     );
 
     match call_ollama_validated(&client, &model, &prompt3, ValidationStage::Final).await {
