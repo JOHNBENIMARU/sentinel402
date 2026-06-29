@@ -6,3 +6,4 @@ secret_key.pem
 data/
 scratch/
 contracts/audit-registry/keys/
+.DS_Store
