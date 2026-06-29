@@ -30,7 +30,7 @@ pub async fn run_mcp_loop<R: BufRead, W: Write>(reader: R, mut writer: W) {
                     "error": { "code": -32700, "message": "Parse error" },
                     "id": null
                 });
-                let _ = writeln!(writer, "{}", err_resp.to_string());
+                let _ = writeln!(writer, "{}", err_resp);
                 let _ = writer.flush();
                 continue;
             }
@@ -55,7 +55,7 @@ pub async fn run_mcp_loop<R: BufRead, W: Write>(reader: R, mut writer: W) {
                         }
                     }
                 });
-                let _ = writeln!(writer, "{}", response.to_string());
+                let _ = writeln!(writer, "{}", response);
             }
             "tools/list" => {
                 let response = json!({
@@ -84,7 +84,7 @@ pub async fn run_mcp_loop<R: BufRead, W: Write>(reader: R, mut writer: W) {
                         ]
                     }
                 });
-                let _ = writeln!(writer, "{}", response.to_string());
+                let _ = writeln!(writer, "{}", response);
             }
             "tools/call" => {
                 let params = request.get("params");
@@ -133,14 +133,14 @@ pub async fn run_mcp_loop<R: BufRead, W: Write>(reader: R, mut writer: W) {
                                 ]
                             }
                         });
-                        let _ = writeln!(writer, "{}", response.to_string());
+                        let _ = writeln!(writer, "{}", response);
                     } else {
                         let response = json!({
                             "jsonrpc": "2.0",
                             "id": id,
                             "error": { "code": -32602, "message": "Invalid params" }
                         });
-                        let _ = writeln!(writer, "{}", response.to_string());
+                        let _ = writeln!(writer, "{}", response);
                     }
                 } else {
                     let response = json!({
@@ -148,7 +148,7 @@ pub async fn run_mcp_loop<R: BufRead, W: Write>(reader: R, mut writer: W) {
                         "id": id,
                         "error": { "code": -32601, "message": "Method not found" }
                     });
-                    let _ = writeln!(writer, "{}", response.to_string());
+                    let _ = writeln!(writer, "{}", response);
                 }
             }
             _ => {
@@ -158,7 +158,7 @@ pub async fn run_mcp_loop<R: BufRead, W: Write>(reader: R, mut writer: W) {
                         "id": id,
                         "error": { "code": -32601, "message": "Method not found" }
                     });
-                    let _ = writeln!(writer, "{}", response.to_string());
+                    let _ = writeln!(writer, "{}", response);
                 }
             }
         }

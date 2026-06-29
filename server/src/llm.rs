@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 /// LLM integration via Ollama (local) for explaining security findings.
 /// Includes response validation to filter out hallucinations and garbage.
-
 const OLLAMA_URL: &str = "http://localhost:11434/api/generate";
 const MAX_RESPONSE_LEN: usize = 2000;
 const MIN_RESPONSE_LEN: usize = 30;
@@ -66,23 +65,29 @@ fn validate_content(text: &str, stage: ValidationStage) -> Option<String> {
         }
     }
 
-    // Gate 3: Relevance check — must contain security-related terms
-    const SECURITY_TERMS: &[&str] = &[
-        "vulnerab", "attack", "exploit", "danger", "risk", "unauthor",
-        "overwrite", "caller", "permission", "access", "guard", "check",
-        "fix", "mitigat", "prevent", "assert", "valid", "safe", "unsafe",
-        "malicious", "inject", "overflow", "panic", "revert", "reentr",
-        "state", "mutation", "mapping", "contract", "function",
-    ];
-    let relevance_score: usize = SECURITY_TERMS
-        .iter()
-        .filter(|term| lower.contains(*term))
-        .count();
+    // Gate 3: Relevance check
+    let relevance_score = if matches!(stage, ValidationStage::Defender) {
+        const DEFENSE_TERMS: &[&str] = &[
+            "safe", "false positive", "check", "guard", "assert",
+            "protect", "prevent", "restrict", "valid", "role", "require",
+            "not vulnerable", "secure", "impossible", "cannot"
+        ];
+        DEFENSE_TERMS.iter().filter(|term| lower.contains(*term)).count()
+    } else {
+        const SECURITY_TERMS: &[&str] = &[
+            "vulnerab", "attack", "exploit", "danger", "risk", "unauthor",
+            "overwrite", "caller", "permission", "access", "guard", "check",
+            "fix", "mitigat", "prevent", "assert", "valid", "safe", "unsafe",
+            "malicious", "inject", "overflow", "panic", "revert", "reentr",
+            "state", "mutation", "mapping", "contract", "function",
+        ];
+        SECURITY_TERMS.iter().filter(|term| lower.contains(*term)).count()
+    };
 
     let min_relevance = match stage {
-        ValidationStage::Scout => 1,      // Souei can be exploratory
-        ValidationStage::Evaluator => 2,  // Raphael must be more focused
-        ValidationStage::Final => 3,      // Benimaru's verdict must be precise
+        ValidationStage::Attacker => 2,
+        ValidationStage::Defender => 1,
+        ValidationStage::Final => 2,
     };
 
     if relevance_score < min_relevance {
@@ -110,10 +115,10 @@ fn validate_content(text: &str, stage: ValidationStage) -> Option<String> {
     Some(text.to_string())
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum ValidationStage {
-    Scout,
-    Evaluator,
+    Attacker,
+    Defender,
     Final,
 }
 
@@ -263,7 +268,7 @@ async fn call_ollama_validated(
 
 // ─── Public API ─────────────────────────────────────────────────────
 
-/// Generate AI explanation for a security finding using a 3-agent Tempest Quorum
+/// Generate AI explanation for a security finding using a Crucible Swarm (Attacker vs Defender -> Judge)
 /// with validation at each stage. Falls back to Great Sage if any stage fails.
 pub async fn explain_finding(
     finding_title: &str,
@@ -275,85 +280,82 @@ pub async fn explain_finding(
     let model = get_model();
     let fallback = get_fallback(finding_title);
 
-    // Phase 1: Parallel reconnaissance — Souei and Raphael run simultaneously
-    // (Inspired by RAXCLAW's parallel agent architecture, adapted for LLM quorum)
-    let prompt_scout = format!(
-        "You are Souei, a security reconnaissance specialist. Analyze this smart contract vulnerability step by step.\n\nFirst, identify the vulnerable pattern. Then determine the scope of impact.\n\nFinding: {}\nDescription: {}\nCode:\n{}",
+    // Phase 1: Parallel adversarial reconnaissance
+    let prompt_attacker = format!(
+        "You are an Attacker (Red Team). Your goal is to exploit this smart contract.\n\nThink like a hacker. Identify how to bypass protections and write a detailed Attack Chain.\n\nFinding: {}\nDescription: {}\nCode:\n{}",
         finding_title, finding_description, source_snippet
     );
-    let prompt_evaluator = format!(
-        "You are Raphael, a smart contract security evaluator. Think through the following code carefully.\n\nDoes this violate smart contract safety conventions? Consider:\n1. Access control patterns\n2. State mutation safety\n3. Known attack vectors (reentrancy, overflow, unauthorized access)\n\nFinding: {}\nDescription: {}\nCode:\n{}",
+    let prompt_defender = format!(
+        "You are a Defender (Blue Team). Your goal is to prove this contract is SAFE and the finding is a False Positive.\n\nAnalyze the code for protective measures (e.g. asserts, role checks, data flow constraints) that prevent the attack.\n\nFinding: {}\nDescription: {}\nCode:\n{}",
         finding_title, finding_description, source_snippet
     );
 
-    // Launch both agents in parallel (tokio::join! — no wasted time)
-    let (scout_result, evaluator_result) = tokio::join!(
-        call_ollama_validated(&client, &model, &prompt_scout, ValidationStage::Scout),
-        call_ollama_validated(&client, &model, &prompt_evaluator, ValidationStage::Evaluator),
+    // Launch both agents in parallel
+    let (attacker_result, defender_result) = tokio::join!(
+        call_ollama_validated(&client, &model, &prompt_attacker, ValidationStage::Attacker),
+        call_ollama_validated(&client, &model, &prompt_defender, ValidationStage::Defender),
     );
 
-    let resp1 = match scout_result {
+    let resp_attacker = match attacker_result {
         Some(r) => {
-            println!("✅ LLM: Souei (Scout) passed validation.");
+            println!("✅ LLM: Attacker Agent passed validation.");
             r
         }
         None => {
-            println!("⚠️ LLM: Souei (Scout) failed validation, using Great Sage fallback.");
-            return Some(fallback);
+            println!("⚠️ LLM: Attacker Agent failed validation, using fallback.");
+            "Attack failed to generate.".to_string()
         }
     };
 
-    let resp2 = match evaluator_result {
+    let resp_defender = match defender_result {
         Some(r) => {
-            println!("✅ LLM: Raphael (Evaluator) passed validation.");
+            println!("✅ LLM: Defender Agent passed validation.");
             r
         }
         None => {
-            println!("⚠️ LLM: Raphael (Evaluator) failed validation, using Great Sage fallback.");
-            return Some(fallback);
-            }
-        };
+            println!("⚠️ LLM: Defender Agent failed validation.");
+            "No valid defense found.".to_string()
+        }
+    };
 
-    // Agent 3: Chief Auditor (Benimaru — Final Verdict)
-    // Enrich with exploit knowledge base (our lightweight alternative to RAXCLAW's Qdrant)
+    // Agent 3: Judge (Arbiter)
     let exploit_matches = crate::exploits::search_exploits(source_snippet);
     let exploit_ctx = crate::exploits::format_exploit_context(&exploit_matches);
     if !exploit_matches.is_empty() {
         println!("🗃️ Exploit DB: {} known patterns matched", exploit_matches.len());
     }
 
-    let prompt3 = format!(
-        r#"You are a chief security auditor. Review two prior analyses and deliver a final verdict.
+    let prompt_judge = format!(
+        r#"You are the Judge Arbiter. Review the arguments from the Attacker and the Defender, then deliver a final verdict.
 
-Analysis 1: {resp1}
-Analysis 2: {resp2}
+Attacker (Red Team): {resp1}
+Defender (Blue Team): {resp2}
 Threat: {title} ({severity})
 Code:
 ```
 {code}
 ```
 {exploits}
-Think step by step, then respond in EXACTLY this format:
+Think step by step. If the Defender's arguments are stronger and the code is safe, respond with EXACTLY: "FALSE POSITIVE" and explain why in one sentence.
+If the Attacker's exploit is valid, respond in EXACTLY this format:
 Why dangerous: (1 sentence)
 Attack scenario: (1 sentence)
-Fix: (1-2 sentences)
-
-If the analyses concluded this is safe, write "FALSE POSITIVE" and explain why. Be technical and concise."#,
-        resp1 = resp1,
-        resp2 = resp2,
+Fix: (1-2 sentences)"#,
+        resp1 = resp_attacker,
+        resp2 = resp_defender,
         title = finding_title,
         severity = severity,
         code = source_snippet,
         exploits = exploit_ctx
     );
 
-    match call_ollama_validated(&client, &model, &prompt3, ValidationStage::Final).await {
+    match call_ollama_validated(&client, &model, &prompt_judge, ValidationStage::Final).await {
         Some(verdict) => {
-            println!("✅ LLM: Benimaru (Final Verdict) passed validation.");
+            println!("✅ LLM: Judge Agent passed validation.");
             Some(verdict)
         }
         None => {
-            println!("⚠️ LLM: Benimaru (Final Verdict) failed validation, using Great Sage fallback.");
+            println!("⚠️ LLM: Judge Agent failed validation, using Great Sage fallback.");
             Some(fallback)
         }
     }
@@ -390,18 +392,41 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_scout_is_lenient() {
+    fn test_validate_attacker_is_lenient() {
         let vague = "This function modifies state without any visible access control mechanism.";
-        let result = validate_response(vague, ValidationStage::Scout);
-        assert!(result.is_some(), "Scout stage should be lenient");
+        let result = validate_response(vague, ValidationStage::Attacker);
+        assert!(result.is_some(), "Attacker stage should be lenient");
+    }
+
+    #[test]
+    fn test_validate_defender() {
+        let defense = "This is a false positive because there is a require check protecting the function.";
+        let result = validate_response(defense, ValidationStage::Defender);
+        assert!(result.is_some(), "Defender stage should accept defense terms");
     }
 
     #[test]
     fn test_validate_truncates_long_response() {
         let long = "A ".repeat(2000);
-        let result = validate_response(&long, ValidationStage::Scout);
+        let result = validate_response(&long, ValidationStage::Attacker);
         // Should be truncated or rejected, not panic
         assert!(result.is_none() || result.unwrap().len() <= MAX_RESPONSE_LEN + 10);
+    }
+
+    #[test]
+    fn test_crucible_conflict_handling() {
+        // Test edge cases where responses are borderline or conflicting
+        let weak_attack = "This might be bad if the stars align, but I don't know.";
+        let result_attack = validate_response(weak_attack, ValidationStage::Attacker);
+        assert!(result_attack.is_none(), "Weak attack lacking security terms should be rejected");
+
+        let strong_defense = "This is a false positive. The contract is safe because it has a require guard.";
+        let result_defense = validate_response(strong_defense, ValidationStage::Defender);
+        assert!(result_defense.is_some(), "Strong defense should be accepted by Defender");
+
+        let conflicted_judge = "As an AI language model, I cannot decide. It might be dangerous or safe.";
+        let result_judge = validate_response(conflicted_judge, ValidationStage::Final);
+        assert!(result_judge.is_none(), "Judge hallucination or lack of structure should be rejected");
     }
 
     #[test]

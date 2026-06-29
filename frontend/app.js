@@ -10,7 +10,8 @@ async function submitScan() {
     const paymentModal = document.getElementById('payment-modal');
 
     btn.disabled = true;
-    btn.textContent = '🔍 Initiating Scan...';
+    btn.classList.add('loading');
+    btn.querySelector('.btn-text').textContent = 'Initiating Scan...';
     results.classList.add('hidden');
 
     currentScanData = { contract_hash: hash, source_code: source };
@@ -38,7 +39,8 @@ async function submitScan() {
         alert('Network Error: ' + err.message);
     } finally {
         btn.disabled = false;
-        btn.textContent = '⚡ Scan for Vulnerabilities';
+        btn.classList.remove('loading');
+        btn.querySelector('.btn-text').textContent = 'Scan for Vulnerabilities';
     }
 }
 
@@ -77,7 +79,9 @@ function showPaymentModal(details) {
         document.getElementById('wallet-not-detected').style.display = 'block';
     }
 
-    document.getElementById('payment-modal').style.display = 'flex';
+    const modal = document.getElementById('payment-modal');
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
 }
 
 async function connectCasperWallet() {
@@ -150,7 +154,9 @@ async function payWithCasperWallet() {
         }
 
         // Hide modal
-        document.getElementById('payment-modal').style.display = 'none';
+        const modal = document.getElementById('payment-modal');
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
         signBtn.disabled = false;
         signBtn.textContent = '✍️ Sign & Pay with Casper Wallet';
 
@@ -176,7 +182,9 @@ async function simulateAgentPayment() {
     await new Promise(r => setTimeout(r, 1500));
 
     // Hide modal
-    document.getElementById('payment-modal').style.display = 'none';
+    const modal = document.getElementById('payment-modal');
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
     btn.disabled = false;
     btn.textContent = 'Simulate Agent Payment (Mock Fallback)';
 
@@ -192,7 +200,8 @@ async function submitScanWithProof() {
     const results = document.getElementById('results');
 
     btn.disabled = true;
-    btn.textContent = '🔍 Scanning (Payment Verified)...';
+    btn.classList.add('loading');
+    btn.querySelector('.btn-text').textContent = 'Scanning (Verified)...';
 
     try {
         const res = await fetch(`${API_URL}/scan`, {
@@ -212,7 +221,8 @@ async function submitScanWithProof() {
         alert('Network Error: ' + err.message);
     } finally {
         btn.disabled = false;
-        btn.textContent = '⚡ Scan for Vulnerabilities';
+        btn.classList.remove('loading');
+        btn.querySelector('.btn-text').textContent = 'Scan for Vulnerabilities';
     }
 }
 
@@ -220,27 +230,59 @@ function renderResults(data) {
     const summary = document.getElementById('summary');
     summary.innerHTML = `
         <div class="summary-grid">
-            <div class="stat catastrophe">${data.summary.catastrophe} <span>Catastrophe</span></div>
-            <div class="stat disaster">${data.summary.disaster} <span>Disaster</span></div>
-            <div class="stat calamity">${data.summary.calamity} <span>Calamity</span></div>
-            <div class="stat hazard">${data.summary.hazard} <span>Hazard</span></div>
-        </div>
-        <p class="audit-id">Audit ID: <code>${data.audit_id}</code></p>
-        <p class="risk-score">Risk: <strong class="risk-${data.summary.risk_score.toLowerCase()}">${data.summary.risk_score}</strong></p>
-        ${data.on_chain ? `
-        <div class="on-chain-proof">
-            <h3>📝 On-Chain Proof (Casper Testnet)</h3>
-            <p>Deploy Hash: <code>${data.on_chain.deploy_hash}</code> ${data.on_chain.simulated ? '<span class="badge badge-low" style="background: rgba(78, 205, 196, 0.15); color: var(--low); font-size: 0.7rem; margin-left: 0.5rem; vertical-align: middle;">Simulated</span>' : ''}</p>
-            <p>Timestamp: <code>${new Date(data.on_chain.timestamp * 1000).toISOString()}</code></p>
-            ${data.on_chain.simulated ? `
-            <div class="wallet-warning" style="margin: 0.75rem 0; border: 1px dashed rgba(255, 184, 0, 0.3); background: rgba(255, 184, 0, 0.03); padding: 0.75rem; border-radius: 6px; font-size: 0.8rem; text-align: left;">
-                <p style="margin: 0; color: var(--text-dim); line-height: 1.4;">⚠️ <strong>Sandbox Simulation:</strong> This audit was completed in a local test sandbox. The deploy hash above is simulated. Click below to view a real transaction page on the Casper network explorer.</p>
+            <div class="stat critical">
+                <span class="glow-dot" style="margin: 0 auto; width: 8px; height: 8px;"></span>
+                <span style="margin-top: 1rem;">Critical (${data.summary.critical !== undefined ? data.summary.critical : 0})</span>
             </div>
-            <a href="https://testnet.cspr.live/deploy/dadbee1809cc85862a2665a464df669cac7e8cbd56c135c49abe2bb0759739b4" target="_blank" class="explorer-link" style="background: linear-gradient(135deg, var(--medium), #e5a500); color: #0a0a0f;">🔍 View Sample Transaction on CSPR.live →</a>
-            ` : `
-            <a href="${data.on_chain.explorer_url}" target="_blank" class="explorer-link">View on Casper Explorer →</a>
-            `}
-        </div>` : ''}
+            <div class="stat high">
+                <span class="glow-dot" style="margin: 0 auto; width: 8px; height: 8px;"></span>
+                <span style="margin-top: 1rem;">High (${data.summary.high !== undefined ? data.summary.high : 0})</span>
+            </div>
+            <div class="stat medium">
+                <span class="glow-dot" style="margin: 0 auto; width: 8px; height: 8px;"></span>
+                <span style="margin-top: 1rem;">Medium (${data.summary.medium !== undefined ? data.summary.medium : 0})</span>
+            </div>
+            <div class="stat low">
+                <span class="glow-dot" style="margin: 0 auto; width: 8px; height: 8px;"></span>
+                <span style="margin-top: 1rem;">Low (${data.summary.low !== undefined ? data.summary.low : 0})</span>
+            </div>
+            <div class="stat safe">
+                <span class="glow-dot" style="margin: 0 auto; width: 8px; height: 8px;"></span>
+                <span style="margin-top: 1rem;">Safe</span>
+            </div>
+        </div>
+        <div class="audit-meta-block glass-panel" style="padding: 1.5rem; margin-bottom: 2rem;">
+            <div class="meta-row">
+                <span class="meta-label">Audit ID</span>
+                <code class="meta-value">${data.audit_id}</code>
+            </div>
+            <div class="meta-row" style="margin-top: 0.75rem;">
+                <span class="meta-label">Risk</span>
+                <strong class="risk-${data.summary.risk_score.toLowerCase()} meta-value">${data.summary.risk_score}</strong>
+            </div>
+            ${data.on_chain ? `
+            <hr class="meta-divider" style="border: 0; height: 1px; background: var(--border); margin: 1.25rem 0;">
+            <div class="on-chain-proof" style="margin-top: 0; padding: 0; background: none; border: none;">
+                <h3 style="font-size: 0.95rem; margin-bottom: 1rem; color: var(--text);">📝 On-Chain Proof (Casper Testnet)</h3>
+                <div class="meta-row">
+                    <span class="meta-label">Deploy Hash</span>
+                    <code class="meta-value truncate-middle" title="${data.on_chain.deploy_hash}">${truncateMiddle(data.on_chain.deploy_hash, 24)}</code>
+                    ${data.on_chain.simulated ? '<span class="simulated-badge">Simulated</span>' : ''}
+                </div>
+                <div class="meta-row" style="margin-top: 0.75rem;">
+                    <span class="meta-label">Timestamp</span>
+                    <code class="meta-value">${new Date(data.on_chain.timestamp * 1000).toISOString()}</code>
+                </div>
+                ${data.on_chain.simulated ? `
+                <div class="wallet-warning" style="margin: 1rem 0; border: 1px dashed rgba(255, 184, 0, 0.3); background: rgba(255, 184, 0, 0.03); padding: 0.75rem; border-radius: 6px; font-size: 0.8rem; text-align: left;">
+                    <p style="margin: 0; color: var(--text-dim); line-height: 1.4;">⚠️ <strong>Sandbox Simulation:</strong> This audit was completed in a local test sandbox. The deploy hash above is simulated. Click below to view a real transaction page on the Casper network explorer.</p>
+                </div>
+                <a href="https://testnet.cspr.live/deploy/dadbee1809cc85862a2665a464df669cac7e8cbd56c135c49abe2bb0759739b4" target="_blank" class="explorer-link" style="display: inline-block; padding: 0.5rem 1rem; background: linear-gradient(135deg, var(--medium), #e5a500); color: #0a0a0f; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem;">🔍 View Sample Transaction on CSPR.live →</a>
+                ` : `
+                <a href="${data.on_chain.explorer_url}" target="_blank" class="explorer-link" style="display: inline-block; margin-top: 1rem; padding: 0.5rem 1rem; background: linear-gradient(135deg, var(--low), #2fa89e); color: #0a0a0f; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem;">View on Casper Explorer →</a>
+                `}
+            </div>` : ''}
+        </div>
     `;
 
     const list = document.getElementById('findings-list');
@@ -249,10 +291,28 @@ function renderResults(data) {
         return;
     }
 
-    list.innerHTML = data.findings.map(f => `
-        <div class="finding finding-${f.severity.toLowerCase()}">
+    const getIcon = (severity) => {
+        switch(severity.toLowerCase()) {
+            case 'critical': return '💥';
+            case 'high': return '🔥';
+            case 'medium': return '⚡';
+            case 'low': return '⚠️';
+            default: return '✅';
+        }
+    };
+
+    const severityOrder = { critical: 0, high: 1, medium: 2, low: 3, safe: 4 };
+    const sorted = [...data.findings].sort((a, b) => 
+        (severityOrder[a.severity.toLowerCase()] ?? 5) - (severityOrder[b.severity.toLowerCase()] ?? 5)
+    );
+
+    list.innerHTML = sorted.map((f, i) => `
+        <div class="finding finding-${f.severity.toLowerCase()} animate-in glass-panel" style="animation-delay: ${0.1 + i * 0.15}s; padding: 1.5rem; border-left: 2px solid var(--${f.severity.toLowerCase()});">
             <div class="finding-header">
-                <span class="badge badge-${f.severity.toLowerCase()}">${f.severity}</span>
+                <span class="badge badge-${f.severity.toLowerCase()}">
+                    <span class="glow-dot"></span>
+                    <span style="position: relative; z-index: 1;">${getIcon(f.severity)} ${f.severity}</span>
+                </span>
                 <span class="finding-id">${f.id}</span>
                 <span class="finding-line">L${f.line}</span>
             </div>
@@ -260,7 +320,7 @@ function renderResults(data) {
             <p>${f.description}</p>
             ${f.ai_explanation ? `
             <div class="ai-explanation">
-                <span class="ai-badge">🧠 AI Analysis</span>
+                <span class="ai-badge">AI Analysis</span>
                 <p>${f.ai_explanation}</p>
             </div>` : ''}
         </div>
@@ -305,20 +365,41 @@ function renderHistory() {
         const explorer = h.explorer || '#';
         
         return `
-            <div class="history-item">
-                <div class="history-header">
-                    <span class="badge badge-${scoreClass}">${score}</span>
-                    <strong>${id}</strong>
-                    <span class="small-text" style="margin: 0; margin-left: auto;">${timestamp}</span>
+            <div class="history-item glass-panel score-${scoreClass}">
+                <div class="history-score">
+                    <span class="badge badge-${scoreClass}">
+                        <span class="glow-dot"></span>
+                        <span style="position: relative; z-index: 1;">${score}</span>
+                    </span>
                 </div>
-                <div class="history-details">
-                    <span>Contract: ${contract}</span>
-                    <span>Findings: ${findings}</span>
-                    ${explorer !== '#' ? `<a href="${explorer}" target="_blank">View on Explorer</a>` : ''}
+                <div class="history-body">
+                    <div class="history-id-time">
+                        <strong title="${id}">${truncateMiddle(id, 20)}</strong>
+                        <span class="small-text history-time">${timestamp}</span>
+                    </div>
+                </div>
+                <div class="history-metrics">
+                    <div class="metric-row">
+                        <span class="metric-label">Contract:</span> 
+                        <span class="metric-val" title="${contract}">${truncateMiddle(contract, 16)}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Findings:</span> 
+                        <span class="metric-val">${findings}</span>
+                    </div>
+                </div>
+                <div class="history-actions">
+                    ${explorer !== '#' ? `<a href="${explorer}" target="_blank" class="explorer-link-mini">🔍 Explorer</a>` : ''}
                 </div>
             </div>
         `;
     }).join('');
+}
+
+function truncateMiddle(str, maxLength) {
+    if (!str || str.length <= maxLength) return str;
+    const half = Math.floor((maxLength - 3) / 2);
+    return str.substring(0, half) + '...' + str.substring(str.length - half);
 }
 
 // Explicit global binding for HTML event handlers
@@ -327,7 +408,73 @@ window.connectCasperWallet = connectCasperWallet;
 window.payWithCasperWallet = payWithCasperWallet;
 window.simulateAgentPayment = simulateAgentPayment;
 
+// Advanced Glow Dot Proximity Animation
+let mouseX = -1000;
+let mouseY = -1000;
+
+document.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+});
+
+function animateGlowDots() {
+    const dots = document.querySelectorAll('.glow-dot');
+    dots.forEach(dot => {
+        const rect = dot.getBoundingClientRect();
+        if (rect.width === 0) return;
+        
+        const dotX = rect.left + rect.width / 2;
+        const dotY = rect.top + rect.height / 2;
+        
+        const dx = mouseX - dotX;
+        const dy = mouseY - dotY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        const maxDistance = 300;
+        let targetIntensity = 0;
+        
+        const parent = dot.closest('.finding, .history-item, .stat');
+        const isHovered = parent && parent.matches(':hover');
+        
+        if (isHovered) {
+            targetIntensity = 0.25;
+        }
+        
+        if (distance < maxDistance) {
+            const proximity = Math.pow(1 - (distance / maxDistance), 2);
+            targetIntensity = Math.max(targetIntensity, proximity);
+        }
+        
+        let currentIntensity = parseFloat(dot.getAttribute('data-intensity') || '0');
+        
+        const lerpFactor = targetIntensity > currentIntensity ? 0.04 : 0.08;
+        currentIntensity += (targetIntensity - currentIntensity) * lerpFactor;
+        
+        if (Math.abs(targetIntensity - currentIntensity) < 0.001) {
+            currentIntensity = targetIntensity;
+        }
+        
+        dot.setAttribute('data-intensity', currentIntensity);
+        dot.style.setProperty('--glow-intensity', currentIntensity.toFixed(3));
+        
+        // Dynamic box-shadow: base 4px → max 12px, spread 1px → 4px
+        const blur1 = 4 + currentIntensity * 8;
+        const spread1 = 1 + currentIntensity * 3;
+        const blur2 = 10 + currentIntensity * 14;
+        const spread2 = 2 + currentIntensity * 6;
+        dot.style.boxShadow = `0 0 ${blur1}px ${spread1}px currentColor, 0 0 ${blur2}px ${spread2}px currentColor`;
+        
+        // PCB texture reacts at 1/3 the intensity of glow dots
+        if (parent) {
+            parent.style.setProperty('--pcb-intensity', (currentIntensity / 3).toFixed(3));
+        }
+    });
+    
+    requestAnimationFrame(animateGlowDots);
+}
+
 // Init
 document.addEventListener('DOMContentLoaded', () => {
     renderHistory();
+    requestAnimationFrame(animateGlowDots);
 });

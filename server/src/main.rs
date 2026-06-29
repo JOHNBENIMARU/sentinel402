@@ -17,6 +17,7 @@ mod exploits;
 mod llm;
 mod mcp;
 mod report;
+mod taint;
 mod x402;
 
 #[tokio::main]
@@ -167,9 +168,9 @@ async fn scan_contract(Json(req): Json<ScanRequest>) -> impl IntoResponse {
         if explanations_generated >= 5 {
             break;
         }
-        if finding.severity == "CATASTROPHE"
-            || finding.severity == "DISASTER"
-            || finding.severity == "CALAMITY"
+        if finding.severity == report::Severity::Critical
+            || finding.severity == report::Severity::High
+            || finding.severity == report::Severity::Medium
         {
             // Extract code snippet around the actual finding line (±7 lines)
             let snippet = if finding.line > 0 && finding.line <= source_lines.len() {
@@ -184,7 +185,7 @@ async fn scan_contract(Json(req): Json<ScanRequest>) -> impl IntoResponse {
             finding.ai_explanation = llm::explain_finding(
                 &finding.title,
                 &finding.description,
-                &finding.severity,
+                &finding.severity.to_string(),
                 &snippet,
             )
             .await;
@@ -196,7 +197,7 @@ async fn scan_contract(Json(req): Json<ScanRequest>) -> impl IntoResponse {
     let on_chain = casper_rpc::record_audit_on_chain(
         &audit_id,
         &req.contract_hash,
-        &summary.risk_score,
+        &summary.risk_score.to_string(),
         summary.total_findings as u32,
     )
     .await

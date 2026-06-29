@@ -6,8 +6,8 @@ pub struct FnInfo {
     pub name: String,
     pub is_public: bool,
     pub start_line: usize, // 1-indexed
-    pub end_line: usize,   // 1-indexed
     pub node_id: usize,    // tree-sitter node id for lookups
+    pub args: Vec<String>, // arguments like "to", "amount"
 }
 
 /// Parsed struct field information
@@ -15,14 +15,12 @@ pub struct FnInfo {
 pub struct FieldInfo {
     pub name: String,
     pub type_name: String, // e.g. "Mapping<Address, U256>"
-    pub line: usize,       // 1-indexed
 }
 
 /// A method call found in the AST
 #[derive(Debug, Clone)]
 pub struct CallInfo {
     pub receiver: String, // e.g. "self.balances"
-    pub method: String,   // e.g. "set"
     pub line: usize,      // 1-indexed
 }
 
@@ -55,12 +53,27 @@ fn collect_functions(node: Node, source: &str, results: &mut Vec<FnInfo>) {
         // Check for visibility modifier (pub, pub(crate), etc.)
         let is_public = has_visibility_modifier(node);
 
+        // Parse arguments
+        let mut args = Vec::new();
+        if let Some(params) = node.child_by_field_name("parameters") {
+            let mut cursor = params.walk();
+            for param in params.children(&mut cursor) {
+                if param.kind() == "parameter" {
+                    if let Some(pat) = param.child_by_field_name("pattern") {
+                        if let Ok(text) = pat.utf8_text(source.as_bytes()) {
+                            args.push(text.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
         results.push(FnInfo {
             name,
             is_public,
             start_line: node.start_position().row + 1,
-            end_line: node.end_position().row + 1,
             node_id: node.id(),
+            args,
         });
     }
 
@@ -111,7 +124,6 @@ fn collect_struct_fields(node: Node, source: &str, results: &mut Vec<FieldInfo>)
             results.push(FieldInfo {
                 name,
                 type_name,
-                line: node.start_position().row + 1,
             });
         }
     }
@@ -196,7 +208,6 @@ fn collect_method_calls(node: Node, source: &str, method_name: &str, results: &m
 
                     results.push(CallInfo {
                         receiver,
-                        method: method.to_string(),
                         line: node.start_position().row + 1,
                     });
                 }
@@ -242,7 +253,6 @@ fn collect_function_calls(
             if call_text.contains(target_fn) {
                 results.push(CallInfo {
                     receiver: String::new(),
-                    method: call_text.to_string(),
                     line: node.start_position().row + 1,
                 });
             }
@@ -270,7 +280,7 @@ fn check_result_handling(node: Node, source: &str, target_line: usize) -> bool {
     // Check if the call is inside a match expression
     if node.kind() == "match_expression" {
         let node_text = node.utf8_text(source.as_bytes()).unwrap_or("");
-        if node.start_position().row + 1 <= target_line
+        if node.start_position().row < target_line
             && node.end_position().row + 1 >= target_line
         {
             return true;
@@ -422,9 +432,43 @@ fn collect_unsafe_arithmetic(node: Node, source: &str, results: &mut Vec<usize>)
     }
 }
 
+/// Check for division (/) or modulo (%) operations in a function.
+pub fn find_division_in_fn(
+    tree: &Tree,
+    func: &FnInfo,
+    source: &str,
+) -> Vec<usize> {
+    let mut results = Vec::new();
+    let root = tree.root_node();
+    if let Some(fn_node) = find_node_by_id(root, func.node_id) {
+        if let Some(body) = fn_node.child_by_field_name("body") {
+            collect_division(body, source, &mut results);
+        }
+    }
+    results
+}
+
+fn collect_division(node: Node, source: &str, results: &mut Vec<usize>) {
+    if node.kind() == "binary_expression" {
+        if let Some(op) = node.child_by_field_name("operator") {
+            let op_text = op.utf8_text(source.as_bytes()).unwrap_or("");
+            if op_text == "/" || op_text == "%" {
+                let line = node.start_position().row + 1;
+                results.push(line);
+                return; // don't recurse into children of this expression
+            }
+        }
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_division(child, source, results);
+    }
+}
+
 // --- Internal helpers ---
 
-fn find_node_by_id(node: Node, target_id: usize) -> Option<Node> {
+pub fn find_node_by_id(node: Node, target_id: usize) -> Option<Node> {
     if node.id() == target_id {
         return Some(node);
     }

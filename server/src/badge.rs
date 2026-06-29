@@ -1,10 +1,10 @@
 /// Generate dynamic SVG badge for Sentinel402 audit reports
 pub fn generate_badge(risk_score: &str) -> String {
     let (color, label) = match risk_score.to_uppercase().as_str() {
-        "CATASTROPHE" => ("#e05d44", "CATASTROPHE"),
-        "DISASTER" => ("#fe7d37", "DISASTER"),
-        "CALAMITY" => ("#dfb317", "CALAMITY"),
-        "HAZARD" => ("#97ca00", "HAZARD"),
+        "CRITICAL" => ("#e05d44", "CRITICAL"),
+        "HIGH" => ("#fe7d37", "HIGH"),
+        "MEDIUM" => ("#dfb317", "MEDIUM"),
+        "LOW" => ("#97ca00", "LOW"),
         "SAFE" => ("#4c1", "SAFE"),
         _ => ("#9f9f9f", "UNKNOWN"),
     };

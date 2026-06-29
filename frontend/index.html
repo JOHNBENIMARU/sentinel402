@@ -7,18 +7,22 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div class="ambient-glow"></div>
     <div class="container">
         <header>
-            <h1>🔥 Sentinel402</h1>
+            <h1>Sentinel402</h1>
             <p class="subtitle">AI Security Agent × x402 Micropayments × Casper Network</p>
         </header>
 
         <main>
-            <section class="scan-form">
+            <section class="scan-form glass-panel">
                 <h2>Scan Contract</h2>
                 <textarea id="source-code" placeholder="Paste your Casper smart contract source code (Rust)..." rows="12"></textarea>
                 <input type="text" id="contract-hash" placeholder="Contract hash (optional)">
-                <button id="scan-btn" onclick="submitScan()">⚡ Scan for Vulnerabilities</button>
+                <button id="scan-btn" onclick="submitScan()">
+                    <span class="button-loader"></span>
+                    <span class="btn-text">Scan for Vulnerabilities</span>
+                </button>
             </section>
 
             <section id="results" class="results hidden">
@@ -34,8 +38,8 @@
                 </div>
             </section>
 
-            <div id="payment-modal" class="modal" style="display: none;">
-                <div class="modal-content">
+            <div id="payment-modal" class="modal hidden">
+                <div class="modal-content glass-panel">
                     <h2>HTTP 402: Payment Required</h2>
                     <p class="modal-descr">To run this security scan, please authorize an x402 micropayment.</p>
                     
@@ -82,7 +86,7 @@
         </main>
 
         <footer>
-            <p>Powered by Benimaru 🔥 | Casper Agentic Buildathon 2026</p>
+            <p>Powered by Benimaru | Casper Agentic Buildathon 2026</p>
         </footer>
     </div>
     <script src="app.js"></script>

@@ -1,12 +1,25 @@
+pub mod detectors;
+
 use crate::ast;
 use crate::report::Finding;
+use tree_sitter::Tree;
+
+pub trait Detector {
+    fn analyze(
+        &self,
+        tree: &Tree,
+        source: &str,
+        functions: &[ast::FnInfo],
+        fields: &[ast::FieldInfo],
+    ) -> Vec<Finding>;
+}
 
 /// Privileged function name prefixes that should be guarded.
-const PRIVILEGED_PREFIXES: &[&str] = &[
+pub const PRIVILEGED_PREFIXES: &[&str] = &[
     "set_", "update_", "mint", "record_", "delete_", "remove_",
 ];
 
-fn is_privileged_fn_name(name: &str) -> bool {
+pub fn is_privileged_fn_name(name: &str) -> bool {
     PRIVILEGED_PREFIXES
         .iter()
         .any(|prefix| name.starts_with(prefix) || name == *prefix)
@@ -26,169 +39,11 @@ pub fn analyze(source: &str) -> Vec<Finding> {
     let functions = ast::find_functions(&tree, source);
     let fields = ast::find_struct_fields(&tree, source);
 
-    // Collect Mapping field names
-    let mapping_fields: Vec<&ast::FieldInfo> = fields
-        .iter()
-        .filter(|f| f.type_name.contains("Mapping"))
-        .collect();
+    let detectors = detectors::get_all_detectors();
 
-    // Track CEP-18 features
-    let has_transfer = functions.iter().any(|f| f.name == "transfer");
-    let has_approve = functions.iter().any(|f| f.name == "approve");
-
-    // Analyze each function
-    for func in &functions {
-        // --- Detector 1: Unprotected State Mutation ---
-        if func.is_public && is_privileged_fn_name(&func.name) {
-            if !ast::body_contains_guard(&tree, func, source) {
-                findings.push(Finding {
-                    id: format!("S402-{:03}", findings.len() + 1),
-                    severity: "DISASTER".to_string(),
-                    title: "Unprotected State Mutation".to_string(),
-                    description: "Public function modifies state but lacks caller validation, role checks, or assertion guards. May allow unauthorized access.".to_string(),
-                    line: func.start_line,
-                    pattern: "odra_unprotected_mutation".to_string(),
-                    ai_explanation: None,
-                });
-            }
-        }
-
-        // --- Detector 2: Mapping Overwrite ---
-        for mfield in &mapping_fields {
-            let set_calls = ast::find_method_calls_in_fn(&tree, func, source, "set");
-            for call in &set_calls {
-                // Check if the receiver matches the mapping field (e.g. "self.balances")
-                if call.receiver.contains(&mfield.name)
-                    && !ast::body_contains_guard(&tree, func, source)
-                {
-                    findings.push(Finding {
-                        id: format!("S402-{:03}", findings.len() + 1),
-                        severity: "CATASTROPHE".to_string(),
-                        title: format!("Unchecked Mapping overwrite on '{}'", mfield.name),
-                        description: format!(
-                            "Direct write to Mapping '{}' without authorization or guard check. Attackers can overwrite other users' data.",
-                            mfield.name
-                        ),
-                        line: call.line,
-                        pattern: "odra_mapping_overwrite".to_string(),
-                        ai_explanation: None,
-                    });
-                    break; // one finding per mapping per function
-                }
-            }
-        }
-
-        // --- Detector 3: Unsafe purse transfer ---
-        let transfer_calls =
-            ast::find_function_calls_in_fn(&tree, func, source, "transfer_from_purse_to_account");
-        for call in &transfer_calls {
-            if !ast::is_call_result_handled(&tree, func, source, call.line) {
-                findings.push(Finding {
-                    id: format!("S402-{:03}", findings.len() + 1),
-                    severity: "DISASTER".to_string(),
-                    title: "Unsafe purse transfer".to_string(),
-                    description: "transfer_from_purse_to_account returns a TransferResult. Failing to handle it allows execution to continue after a failed transfer.".to_string(),
-                    line: call.line,
-                    pattern: "casper_unsafe_transfer".to_string(),
-                    ai_explanation: None,
-                });
-            }
-        }
-
-        // --- Detector 4: Reentrancy ---
-        let ext_calls =
-            ast::find_function_calls_in_fn(&tree, func, source, "runtime::call_contract");
-        for call in &ext_calls {
-            if !ast::has_state_update_before_line(&tree, func, source, call.line) {
-                findings.push(Finding {
-                    id: format!("S402-{:03}", findings.len() + 1),
-                    severity: "DISASTER".to_string(),
-                    title: "Potential reentrancy via runtime::call_contract".to_string(),
-                    description: "External contract call detected. Verify state is updated before this call (CEI pattern).".to_string(),
-                    line: call.line,
-                    pattern: "reentrancy".to_string(),
-                    ai_explanation: None,
-                });
-            }
-        }
-
-        // --- Detector 5: Unchecked unwrap ---
-        let unwrap_lines = ast::find_unwrap_calls_in_fn(&tree, func, source);
-        for line in unwrap_lines {
-            findings.push(Finding {
-                id: format!("S402-{:03}", findings.len() + 1),
-                severity: "CALAMITY".to_string(),
-                title: "Unchecked unwrap() may panic".to_string(),
-                description: format!(
-                    "Line {}: unwrap() will panic on None/Err. Use proper error handling in production contracts.",
-                    line
-                ),
-                line,
-                pattern: "unchecked_unwrap".to_string(),
-                ai_explanation: None,
-            });
-        }
-
-        // --- Detector 6: Arithmetic overflow ---
-        let overflow_lines = ast::find_unsafe_arithmetic_in_fn(&tree, func, source);
-        for line in overflow_lines {
-            findings.push(Finding {
-                id: format!("S402-{:03}", findings.len() + 1),
-                severity: "CALAMITY".to_string(),
-                title: "Potential arithmetic overflow on U256".to_string(),
-                description:
-                    "U256 arithmetic without checked_add/checked_mul. May overflow silently."
-                        .to_string(),
-                line,
-                pattern: "overflow".to_string(),
-                ai_explanation: None,
-            });
-        }
-
-        // --- Detector 7: Hardcoded storage keys ---
-        let hardcoded_lines =
-            ast::find_string_literal_args_in_fn(&tree, func, source, "runtime::put_key");
-        for line in hardcoded_lines {
-            findings.push(Finding {
-                id: format!("S402-{:03}", findings.len() + 1),
-                severity: "HAZARD".to_string(),
-                title: "Hardcoded storage key".to_string(),
-                description: "Hardcoded key names reduce upgradability. Consider using constants or configurable key names.".to_string(),
-                line,
-                pattern: "hardcoded_key".to_string(),
-                ai_explanation: None,
-            });
-        }
-
-        // Also check storage::new_uref with string args
-        let uref_lines =
-            ast::find_string_literal_args_in_fn(&tree, func, source, "storage::new_uref");
-        for line in uref_lines {
-            findings.push(Finding {
-                id: format!("S402-{:03}", findings.len() + 1),
-                severity: "HAZARD".to_string(),
-                title: "Hardcoded storage key".to_string(),
-                description: "Hardcoded key names reduce upgradability. Consider using constants or configurable key names.".to_string(),
-                line,
-                pattern: "hardcoded_key".to_string(),
-                ai_explanation: None,
-            });
-        }
-    }
-
-    // --- Detector 8: CEP-18 Non-compliance (global check) ---
-    if has_transfer && !has_approve {
-        findings.push(Finding {
-            id: format!("S402-{:03}", findings.len() + 1),
-            severity: "HAZARD".to_string(),
-            title: "CEP-18 Non-compliance: Missing approve".to_string(),
-            description:
-                "Contract implements transfer() but is missing approve(). Fails CEP-18 standard compliance."
-                    .to_string(),
-            line: 0,
-            pattern: "cep18_compliance".to_string(),
-            ai_explanation: None,
-        });
+    for detector in detectors {
+        let mut f = detector.analyze(&tree, source, &functions, &fields);
+        findings.append(&mut f);
     }
 
     findings
@@ -432,11 +287,92 @@ mod tests {
     fn test_edge_case_near_file_bounds() {
         let code = "self.balances.set(&user, val);";
         let findings = analyze(code);
-        // Should not panic, and since there's no function wrapping this,
-        // tree-sitter won't find function_item nodes → 0 findings
         assert!(
             findings.is_empty() || findings.len() > 0,
             "Should analyze small strings without out-of-bounds panic"
         );
+    }
+
+    #[test]
+    fn test_tainted_input_unvalidated() {
+        let code = r#"
+            pub fn transfer_to_user(&mut self, target_address: Address) {
+                runtime::call_contract(target_address, "transfer", args);
+            }
+        "#;
+        let findings = analyze(code);
+        let found = findings.iter().any(|f| f.pattern == "tainted_input_unvalidated");
+        assert!(found, "Should catch unvalidated tainted input into a sink");
+    }
+
+    #[test]
+    fn test_tainted_input_sanitized() {
+        let code = r#"
+            pub fn transfer_to_user(&mut self, target_address: Address) {
+                assert!(target_address == self.env().caller());
+                runtime::call_contract(target_address, "transfer", args);
+            }
+        "#;
+        let findings = analyze(code);
+        let found = findings.iter().any(|f| f.pattern == "tainted_input_unvalidated");
+        assert!(!found, "Should NOT flag tainted input if it has been sanitized with assert");
+    }
+
+    #[test]
+    fn test_multi_vector_god_class() {
+        // A single contract function that contains multiple severe vulnerabilities.
+        // It must NOT choke the analyzer, and it MUST return all distinct findings.
+        let code = r#"
+            pub fn set_hack_me_god_class(&mut self, user: Address, amount: U256) {
+                // 4. Reentrancy (call before any state update)
+                let ext_call = runtime::call_contract(user, "receive", args);
+
+                // 1. Unprotected state mutation
+                self.admin.set(user);
+
+                // 2. Division by zero
+                let reward = amount / 0;
+
+                // 3. Tainted input into critical sink
+                runtime::call_contract(user, "send_funds", args);
+
+                // 5. Hardcoded key
+                runtime::put_key("secret_admin_key", key);
+            }
+        "#;
+        let findings = analyze(code);
+        
+        let has_unprotected = findings.iter().any(|f| f.pattern == "odra_unprotected_mutation");
+        let has_div_zero = findings.iter().any(|f| f.pattern == "divide_by_zero");
+        let has_tainted = findings.iter().any(|f| f.pattern == "tainted_input_unvalidated");
+        let has_reentrancy = findings.iter().any(|f| f.pattern == "reentrancy");
+        let has_hardcoded = findings.iter().any(|f| f.pattern == "hardcoded_key");
+
+        assert!(has_unprotected, "Missing Unprotected Mutation");
+        assert!(has_div_zero, "Missing Division by Zero");
+        assert!(has_tainted, "Missing Tainted Input");
+        assert!(has_reentrancy, "Missing Reentrancy");
+        assert!(has_hardcoded, "Missing Hardcoded Key");
+    }
+
+    #[test]
+    fn test_ast_dos_resilience() {
+        // Generate an extremely deep nested AST to trigger Stack Overflow
+        // if the tree-sitter parsing or AST walking is done with naive recursion.
+        let depth = 200;
+        let mut code = String::from("pub fn dos_test() {\n");
+        for _ in 0..depth {
+            code.push_str("if true {\n");
+        }
+        code.push_str("let a = 1;\n");
+        for _ in 0..depth {
+            code.push_str("}\n");
+        }
+        code.push_str("}\n");
+
+        // If this crashes with a stack overflow, we fail the test.
+        // Otherwise, it should just return 0 findings gracefully.
+        let findings = analyze(&code);
+        assert!(findings.is_empty(), "Deeply nested code should parse without findings and not crash.");
     }
 }
