@@ -22,3 +22,5 @@ All notable changes to Sentinel402 will be documented in this file.
 ## [2026-06-29 10:00] Daily Review
 - Code health check passed
 
+- Engine pattern docs reviewed (2026-06-29)
+
