@@ -24,3 +24,5 @@ All notable changes to Sentinel402 will be documented in this file.
 
 - Engine pattern docs reviewed (2026-06-29)
 
+- Engine pattern docs reviewed (2026-07-04)
+
