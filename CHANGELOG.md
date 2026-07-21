@@ -34,3 +34,5 @@ All notable changes to Sentinel402 will be documented in this file.
 
 - Formatting pass (2026-07-20)
 
+- Formatting pass (2026-07-21)
+
