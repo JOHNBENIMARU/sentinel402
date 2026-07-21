@@ -40,3 +40,5 @@ All notable changes to Sentinel402 will be documented in this file.
 ## [2026-07-21 10:00] Maintenance
 - Automated documentation review pass
 
+- Engine pattern docs reviewed (2026-07-21)
+
